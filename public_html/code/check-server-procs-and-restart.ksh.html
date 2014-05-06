@@ -1,0 +1,289 @@
+<html><head><title>check-server-procs-and-restart.ksh</title></head>
+<pre>
+#!/bin/ksh
+# dave toal 045 2k01
+# watch all webserver procs
+# mail and restart if any fail
+#
+# ps -fu siteadm
+#
+
+
+box=`hostname`
+
+me=`basename $0`
+results=/tmp/$me-results-file
+goodflag=/tmp/$me-good-flag-file
+badflag=/tmp/$me-bad-flag-file
+mailfile=/tmp/$me-mail-file
+restartmail=/tmp/$me-mail-file-for-restart
+
+sleeptime=5
+
+people="unix@employer.com, website@employer.com"
+
+rm -f $badflag
+rm -f $goodflag
+
+
+
+# ------------------------------------------------------------------
+
+check_server_procs() {
+
+  rm $mailfile
+
+  ps -fu siteadm | sort -n -k 2 &gt; $results
+
+
+  dog80pid=`grep uxwdog $results | grep 80 | awk '{print $2}'`
+  dog43pid=`grep uxwdog $results | grep 43 | awk '{print $2}'`
+
+  echo "dogpid $dog80pid and $dog43pid"
+
+  if [ -z "$dog80pid" ]
+  then 
+    echo "port 80 watchdog process is not running"
+  fi | tee -a $mailfile
+
+ 
+  if [ -z "$dog43pid" ]
+  then 
+    echo "port 443 watchdog process is not running"
+  fi | tee -a $mailfile
+
+
+  ht80pid=`grep ns-httpd $results | grep $dog80pid | awk '{print $2}'`
+  ht43pid=`grep ns-httpd $results | grep $dog43pid | awk '{print $2}'`
+
+  echo "htpid $ht80pid and $ht43pid"
+
+  if [ -z "$ht80pid" ]
+  then 
+    echo "port 80 httpd webserver process is not running"
+  elif [ `echo "$ht80pid" | wc -l` -gt 1 ]
+  then
+    echo "more than one port 80 httpd is running" &gt; /dev/null
+  fi | tee -a $mailfile
+
+ 
+  if [ -z "$ht43pid" ]
+  then
+    echo "port 443 httpd webserver process is not running" 
+  elif [ `echo "$ht443pid" | wc -l` -gt 1 ]
+  then
+    echo "more than one port 443 httpd is running" &gt; /dev/null
+  fi | tee -a $mailfile
+
+
+  topstub80=`grep Cgistub $results | grep " $ht80pid " | awk '{print $2}'`
+  topstub43=`grep Cgistub $results | grep " $ht43pid " | awk '{print $2}'`
+
+  echo "topstubs $topstub80 and $topstub43"
+
+  if [ -z "$topstub80" ]
+  then 
+    echo "first port 80 cgistub is not running"
+  fi | tee -a $mailfile
+
+ 
+  if [ -z "$topstub43" ]
+  then 
+    echo "first port 443 cgistub is not running"
+  fi | tee -a $mailfile
+
+
+  stub80kids=`grep Cgistub $results | grep $topstub80 | grep -v " $ht80pid " | wc -l`
+  stub43kids=`grep Cgistub $results | grep $topstub43 | grep -v " $ht43pid " | wc -l`
+
+  echo "stubkids are $stub80kids and $stub43kids"
+
+  if [ $stub80kids -lt 2 ] 
+  then 
+    echo "less than 3 port 80 cgistubs are running"
+  fi | tee -a $mailfile
+
+ 
+  if [ $stub43kids -lt 2 ]
+  then 
+    echo "less than 3 port 443 cgistubs are running"
+  fi | tee -a $mailfile
+
+
+  if [ -s $mailfile ]
+  then return 1
+  else return 0
+  fi
+
+}
+
+
+
+# ------------------------------------------------------------------
+
+send_good_mail() {
+
+  mailx -s "$box webserver processes are all running" $people &lt;&lt; msg1
+
+`cat $results`
+
+This mail is from $0
+
+msg1
+
+}
+
+
+
+# ------------------------------------------------------------------
+
+send_bad_mail() {
+ 
+  mailx -s "$box webserver processes -- problem" $people &lt;&lt; msg2
+
+
+	These problems were noticed:
+
+`cat $mailfile`
+
+
+
+	The current processes are:
+ 
+`cat $results`
+
+
+
+	Now restarting the webservers on $box...
+
+
+This mail is from $0
+
+msg2
+
+}    
+
+
+
+# ------------------------------------------------------------------
+
+restart_the_server() {
+
+  /www.server stop
+
+  sleep 2
+
+  echo "
+	After stopping the web servers, siteadm was running:
+  " | tee $restartmail
+
+  ps -fu siteadm | sort -n -k 2 | tee -a $restartmail
+
+
+  for thing in java uxwdog ns-httpd Cgistub
+  do
+
+    for pid in `ps -fu siteadm | grep $thing | awk '{print $2}'`
+    do
+      echo "killing $thing, pid $pid"
+      kill -9 $pid
+    done 
+
+  done | tee -a $restartmail
+
+
+  echo "
+	After killing any stray processes:
+  " | tee -a  $restartmail
+
+  ps -fu siteadm | sort -n -k 2 &gt;&gt; $restartmail
+
+
+  /www.server start
+
+  sleep 2
+
+
+  echo "
+        After restarting the web servers, this is running:
+  " | tee -a $restartmail
+
+  ps -fu siteadm | sort -n -k 2 &gt;&gt; $restartmail                                                      
+
+ 
+  mailx -s "$box servers were restarted" $people &lt;&lt; msg3
+
+`cat $restartmail`
+
+
+This mail is from $0
+
+msg3
+
+}
+
+
+
+
+# ------------------------------------------------------------------
+# main loop
+
+echo "starting at `date`"
+
+while sleep $sleeptime
+do
+
+  echo "in loop"
+
+  if check_server_procs $box
+  then 
+  
+    if [ -f $goodflag ]
+    then 
+      echo "all is well"
+      [ -f $badflag ] && rm $badflag
+    else
+      echo "sending good notification"
+      send_good_mail
+      touch $goodflag
+    fi
+
+  else 
+
+    if [ -f $badflag ]
+    then
+      echo "bad mail already sent"
+    else
+      echo "sending bad notification"
+      send_bad_mail
+      touch $badflag
+      rm $goodflag
+      restart_the_server
+    fi
+
+  fi
+
+done
+
+
+exit 0
+
+
+
+	Possible error states:
+
+		no server tree
+
+		no watchdog, but httpd and cgistub
+
+
+	After stop, kill all stray procs
+
+
+		java
+
+		http and cgistub
+
+
+
+</pre><html>

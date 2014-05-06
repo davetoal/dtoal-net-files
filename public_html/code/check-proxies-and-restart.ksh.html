@@ -1,0 +1,136 @@
+<html><head><title>check-proxies-and-restart.ksh</title></head>
+<pre>
+#!/bin/ksh
+# dave toal 139 2003
+# restart billing proxies
+# log events, don't mail yet
+# when any of 4 procs die
+
+## ps -ef | grep prox
+# siteadm  2064     1  0 16:13:08 pts/7    0:00 /bin/sh /export/argus/www/svc/billing/run_eventdbproxyd
+# siteadm  2074     1  0 16:13:08 pts/7    0:00 /bin/sh /export/argus/www/svc/usage_tracking/run_archiveproxyd
+# siteadm  2054     1  0 16:13:07 pts/7    0:00 /export/argus/bin/perl /export/argus/www/bin/argusdbproxyd
+# 
+
+
+basedir=/appworx
+log=$basedir/proxies-restart-log
+sleeptime=4
+
+# no mail for this one, just log events
+
+
+
+check_proxies() {
+
+  result=0;
+
+
+  if ps -ef | grep -v grep | grep /export/argus/www/svc/billing/run_eventdbproxyd
+  then echo "event proxy is running"
+  else echo "event proxy is down"
+    result=1
+  fi
+
+
+  if ps -ef | grep -v grep | grep /export/argus/www/svc/usage_tracking/run_archiveproxyd
+  then echo "archive proxy is running"
+  else echo "archive proxy is down"
+    result=1
+  fi
+
+
+  if ps -ef | grep -v grep | grep /export/argus/www/bin/argusdbproxyd
+  then echo "argus proxy is running"
+  else echo "argus proxy is down"
+    result=1
+  fi
+ 
+  return $result
+
+}
+
+
+
+restart_proxies() {
+
+  echo "restarting proxies"
+
+  echo "before stop" &gt;&gt; $log
+  /dt-pss &gt;&gt; $log 
+
+  kill_proxies
+  sleep 2
+
+  echo "after stop" &gt;&gt; $log
+  /dt-pss &gt;&gt; $log
+
+  /proxy.server start &gt; /dev/null 2&gt;&1 &
+
+  echo "waiting 5"
+  sleep 5
+
+  echo "after start" &gt;&gt; $log
+  /dt-pss &gt;&gt; $log
+  echo &gt;&gt; $log
+
+}
+
+
+kill_proxies() {
+
+  echo "killing proxies"
+
+  ps -ef | grep -v grep | grep proxyd
+
+  pid=`ps -ef | grep -v grep | grep /export/argus/www/svc/billing/run_eventdbproxyd \
+    | awk '{print $2}'`
+
+  if [ ! -z "$pid" ]
+  then
+    echo "kill -9 $pid"
+    kill -9 $pid
+  fi
+
+
+  pid=`ps -ef | grep -v grep | grep /export/argus/www/svc/usage_tracking/run_archiveproxyd \
+    | awk '{print $2}'`
+
+  if [ ! -z "$pid" ]
+  then
+    echo "kill -9 $pid"
+    kill -9 $pid
+  fi
+
+
+  pid=`ps -ef | grep -v grep | grep /export/argus/www/bin/argusdbproxyd \
+    | awk '{print $2}'`
+
+  if [ ! -z "$pid" ]
+  then
+    echo "kill -9 $pid"
+    kill -9 $pid
+  fi
+
+}
+
+
+while true
+do
+
+  if check_proxies
+  then 
+    echo "up"
+  else 
+    echo "down"
+    echo "restarting at `date`" &gt;&gt; $log
+    restart_proxies
+  fi
+
+
+  sleep $sleeptime
+
+done
+
+
+</pre><html>

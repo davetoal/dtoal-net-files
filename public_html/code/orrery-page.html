@@ -1,0 +1,159 @@
+<html>
+<head>
+<title>three-body orrery</title>
+
+<script type="text/javascript" language="javascript">
+
+  var zero  = {             px: 400, py: 380 }
+  var one   = { running: 0, px: 530, py: 380, count: 0, delay: 100, radius: 130, center: "zero", started: 0 };
+  var two   = { running: 0, px: 700, py: 380, count: 0, delay: 200, radius: 300, center: "zero", started: 0 };
+  var three = { running: 0, px: 750, py: 380, count: 0, delay: 30,  radius: 50,  center: "two",  started: 0 };
+
+  var conv = ( 2 * Math.PI ) / 360;
+
+
+  function toggleone() {
+
+    var labelone = document.getElementById("buttonone");
+
+    if (one.running) {
+      labelone.value = "start one";
+      one.running = 0;
+      clearInterval(one.started);
+    } else {
+      labelone.value = "stop one";
+      one.running = 1;
+      one.started = setInterval("orbit_one()", one.delay); 
+    }
+
+  };
+
+  function orbit_one () {
+
+    if (!one.running) return;
+
+    // eval one.center + ".x"
+
+    one.cx = zero.px;
+    one.cy = zero.py;
+
+    one.px = one.cx + (Math.cos(one.count * conv) * one.radius);
+    one.py = one.cy - (Math.sin(one.count * conv) * one.radius);
+
+    p_one = document.getElementById("one").style;
+
+    p_one.left = one.px;
+    p_one.top  = one.py;
+
+    one.count++;
+
+  };
+
+
+  function toggletwo() {
+
+    var labeltwo = document.getElementById("buttontwo");
+
+    if (two.running) {
+      labeltwo.value = "start two";
+      two.running = 0;
+      clearInterval(two.started);
+    } else {
+      labeltwo.value = "stop two";
+      two.running = 1;
+      two.started = setInterval("orbit_two()", two.delay); 
+    }
+
+  };
+
+  function orbit_two () {
+
+    if (!two.running) return;
+
+    // eval two.center + ".x"
+
+    two.cx = zero.px;
+    two.cy = zero.py;
+
+    two.px = two.cx + (Math.cos(two.count * conv) * two.radius);
+    two.py = two.cy - (Math.sin(two.count * conv) * two.radius);
+
+    p_two = document.getElementById("two").style;
+
+    p_two.left = two.px;
+    p_two.top  = two.py;
+
+    two.count++;
+
+  };
+
+
+
+  function togglethree() {
+
+    var labelthree = document.getElementById("buttonthree");
+
+    if (three.running) {
+      labelthree.value = "start three";
+      three.running = 0;
+      clearInterval(three.started);
+    } else {
+      labelthree.value = "stop three";
+      three.running = 1;
+      three.started = setInterval("orbit_three()", three.delay); 
+    }
+
+  };
+
+  function orbit_three () {
+
+    if (!three.running) return;
+
+    // eval three.center + ".x"
+
+    three.cx = two.px;
+    three.cy = two.py;
+
+    three.px = three.cx + (Math.cos(three.count * conv) * three.radius);
+    three.py = three.cy - (Math.sin(three.count * conv) * three.radius);
+
+    p_three = document.getElementById("three").style;
+
+    p_three.left = three.px;
+    p_three.top  = three.py;
+
+    three.count++;
+
+  };
+
+
+</script>
+
+
+</head>
+
+<body bgcolor="#999999">
+
+
+  <div id="zero"  style="position:absolute;left:400;top:380"><img src="zero.gif"></div>
+  <div id="one"   style="position:absolute;left:530;top:380"><img src="one.gif"></div>
+  <div id="two"   style="position:absolute;left:700;top:380"><img src="two.gif"></div>
+  <div id="three" style="position:absolute;left:750;top:380"><img src="three.gif"></div>
+
+
+  <div id="firstbutton" style="position:absolute;left:500;top:800">
+    <input type="button" id="buttonone" onclick="toggleone();" value="start one">
+  </div>
+
+  <div id="secondbutton" style="position:absolute;left:700;top:700">
+    <input type="button" id="buttontwo" onclick="toggletwo();" value="start two">
+  </div>
+
+  <div id="thirdbutton" style="position:absolute;left:800;top:600">
+    <input type="button" id="buttonthree" onclick="togglethree();" value="start three">
+  </div>
+
+
+</body>
+</html>
+

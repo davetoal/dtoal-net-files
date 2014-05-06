@@ -1,0 +1,22 @@
+<html><head><title>whatmod</title></head>
+<pre>
+#!/bin/ksh
+# dave toal, dec 3, 1998, T&T
+#
+
+[ -z "$1" ] && echo "\n  whatmod &lt;programname&gt;\n\n  % is a valid wildcard. \n" && exit 0
+
+r=`echo "select so_module from so_job_table where so_program like '$1';" | \
+  sqlplus -s admin/password | grep -v SO_ | grep -v "\-\-\-" | \
+  grep -v "^$" | grep -v "rows selected"`
+
+err=1
+[ -z "$r" ] || {
+  echo "$r"
+  err=0
+}
+
+exit $err
+
+
+</pre><html>

@@ -1,0 +1,872 @@
+<html><head><title>check-periodic-and-notify.pl</title></head>
+<pre>
+
+
+# dave toal
+# run periodic dirs check, list any new files
+#   in dirs that aren't running, status isn't 999
+# check for daily list file, create if none,
+#   list of failed files so far today
+# grep any new from daily list,
+#   add to list and notify if not listed
+
+# list of failed files with same format as data, 
+#  hash of file and dir name
+
+
+use strict;
+
+use lib 'r:\Resource\GPD\Std\ver1.2';
+use CdsSmtp;
+# mail handler
+
+my @mailbody;
+my @id_list;
+
+
+use JobsDB;
+my $dbh = JobsDB-&gt;new();
+
+my $LS = 'R:\ScheduledHousekeeping\bin\ls.exe';
+my $MV = 'R:\ScheduledHousekeeping\bin\mv.exe';
+
+my $listjobtracking = "R:\\ScheduledHousekeeping\\list-job-tracking.pl";
+
+
+use lib "./lib";
+use Date::Parse;
+
+my $starttime = localtime();
+# my $stsec = time();
+my $stsec = str2time($starttime);
+
+
+print "\n  List of periodic process directories, tpe files in these dirs\n";
+print "  are either being processed, or have failed.\n\n";
+
+
+# get list of ones not checked by input script
+# look for files in those dirs that haven't been processed
+
+my $dirbase = 'r:\Contracts\perlContracts\CDSUSA_002CD';
+
+# so why does this not work?
+# my %known_failed = &lt;DATA&gt;;
+my %known_failed;
+
+# list of files in the dirs currently
+# $known_failed{$file} = $directory;
+while (&lt;DATA&gt;) {
+  my ($file, $dir) = split;
+  $known_failed{$file} = $dir;
+}
+
+
+# does today's list of failed files exist, read in if so
+my %failed_today;
+
+my ($second, $minute, $hour, $dayOfMonth, $month,
+    $yearOffset, $dayOfWeek, $dayOfYear, $daylightSavings) = localtime();
+$month++;
+my $year = 2000 + ( $yearOffset - 100 );
+my $date = "${month}_${dayOfMonth}_${year}";
+my $failedlist = "tmp/failed_files_" . $date . ".txt";
+
+if (-e "$failedlist") {
+  open(F, "&lt; $failedlist");
+  while (my $l = &lt;F&gt;) {
+    my ($file, $dir, $job, $run, $status) = split(/\s+/, $l);
+    $failed_today{$file} = $dir;
+    $failed_today{"$file job"} = $job;
+    $failed_today{"$file run"} = $run;
+    $failed_today{"$file status"} = $status;
+  }
+  close(F);
+} 
+
+open(F, "&gt;&gt; $failedlist");
+
+
+my @knowndirs = qw(
+
+  001CS0001_ICLetters
+  001CS0003_GenCommTa
+  001CS0013_GenCommTaHwp
+  001CS0016_GenCommTaSjm
+  001CS0025_GenCommTaPnc
+  001CS0033_GenCommTaIlx
+  001CS0052_GenCommTaVloc
+  001CS0055_GenCommTaNwsa
+  001CS0067_GenCommTaFpl
+  001CS0068_GenCommTaIntc
+  001CS0070_GenCommTaAdct
+  001CS0072_GenCommTaAgr
+  001CS0074_GenCommTaAwa
+  001CS0076_GenCommTaAtt
+  001CS0084_GenCommTaCoca
+  001CS0089_GenCommTaThi
+  001CS0092_GenCommTaPru
+  001CS0094_GenCommTaCiti
+  001CS0105_GenCommTaWmt
+  001CS0110_GenCommTaGena
+  002CS001_GenComm
+  001CS0113_GenCommTaHban
+  001CS0007_Dealing
+  001CS0026_DealingTaPnc
+  001CS0053_DealingReorgChicago
+  001CS0060_DealingReorgPFG
+  001CS0066_DealingMcd
+  001CS0088_DealingPFG
+  001CS0093_DealingTaPru
+  001CS0096_DealingCiti
+  001CS0108_DealingAHS
+  005CNY0001_DealingNY
+  005CNY0001_DealingNY
+  005CNY0002_DealingNYAgr
+  005CNY0003_DealingNYHban
+  001CS0002_PSHFulfillment
+  001CS0027_PSHFulfillmentPnc
+  001CS0065_PSHFulfillmentMcd
+  001CS0095_PSHFulfillmentCiti
+  ChequeTa
+  ChequeESPP
+
+);
+
+
+
+
+my @alldirs = qw(
+
+001CS0001_ICLetters
+001CS0002_PSHFulfillment
+001CS0003_GenCommTa
+001CS0005_PaymentsTa
+001CS0006_RpStatements
+001CS0007_Dealing
+001CS0008_DailyChecksTa
+001CS0010_PaymentsTaChx
+001CS0011_ChiStatements
+001CS0012_PaymentsTaUbc
+001CS0013_GenCommTaHwp
+001CS0014_RpStatementsHdi
+001CS0015_RpStatementsUbc
+001CS0016_GenCommTaSjm
+001CS0017_RpStatementsHwp
+001CS0019_ESOPOptions
+001CS0020_RpStatementsCme
+001CS0021_TaxStatementsTa
+001CS0024_RpStatementsPnc
+001CS0025_GenCommTaPnc
+001CS0026_DealingTaPnc
+001CS0027_PSHFulfillmentPnc
+001CS0029_DailyChecksTaPnc
+001CS0030_RpStatementsIntc
+001CS0033_GenCommTaIlx
+001CS0035_ChiStatementsMolx
+001CS0037_RpStatementsIce
+001CS0041_EnrollmentsAJGE
+001CS0042_InvitesAJGE
+001CS0043_DailyChecksTaFitb
+001CS0044_PaymentsTaVli
+001CS0045_RpStatementsAndw
+001CS0047_RpStatementsFitb
+001CS0048_RpStatementsKey
+001CS0050_RpStatementsHsba
+001CS0052_GenCommTaVloc
+001CS0053_DealingReorgChicago
+001CS0054_ChiStatementsSvm
+001CS0055_GenCommTaNwsa
+001CS0056_DStatements
+001CS0057_DStatementsHwp
+001CS0058_DStatementsPnc
+001CS0059_DStatementsVloc
+001CS0060_DealingReorgPFG
+001CS0061_DStatementsNwsa
+001CS0062_DStatementsSjm
+001CS0063_RpStatementsFpl
+001CS0064_MCD_Franchise
+001CS0065_PSHFulfillmentMcd
+001CS0066_DealingMcd
+001CS0067_GenCommTaFpl
+001CS0068_GenCommTaIntc
+001CS0069_RpStatementsCbot
+001CS0070_GenCommTaAdct
+001CS0071_RpStatementsAdct
+001CS0072_GenCommTaAgr
+001CS0074_GenCommTaAwa
+001CS0075_QuickCerts
+001CS0076_GenCommTaAtt
+001CS0078_PaymentsTaAtt
+001CS0081_RpStatementsAtt
+001CS0082_RpStatementsCoca
+001CS0083_PaymentsTaCoca
+001CS0084_GenCommTaCoca
+001CS0085_PaymentsTaPfg
+001CS0086_GenCommTaPch
+001CS0087_DailyChecksPfg
+001CS0088_DealingPFG
+001CS0089_GenCommTaThi
+001CS0090_ChiStatementsDRP
+001CS0092_GenCommTaPru
+001CS0093_DealingTaPru
+001CS0094_GenCommTaCiti
+001CS0095_PSHFulfillmentCiti
+001CS0096_DealingCiti
+001CS0097_PaymentsCiti
+001CS0098_EnhancedRpStatementsCiti
+001CS0098_RpStatementsCiti
+001CS0099_StatementsCiti
+001CS0100_CorporateActions
+001CS0103_ChiStatementsWmt
+001CS0104_RpStatementsWmt
+001CS0105_GenCommTaWmt
+001CS0106_PaymentsTaVeh
+001CS0107_PaymentsTaPru
+001CS0108_DealingAHS
+001CS0110_GenCommTaGena
+001CS0111_StatementsIbm
+001CS0112_GenCommTaIbm
+001CS0113_GenCommTaHban
+001CS0116_RpStatementsNuv
+001CS0117_PaymentsNuv
+001CS0118_TaxStatementsCon
+001CS0119_DueDiligence
+001CS042_InvitesAJGE
+002CS001_GenComm
+002CS002_Statements
+002CS004_PaymentsCPM
+002CS005_DailyChecks
+002CS008_TaxStatementsESPP
+002CS009_StatementsMhp
+002CS010_ESOPPHGNA
+002CS011_ESOPRbs
+002CS012_EnrollmentsCPM
+002CS015_StatementsAbt
+002CS016_StatementsDlar
+002CS018_CosmosRemittancePHGNA
+002CS023_ScottLabels
+002CS025_StatementsPfi
+005CNY0001_DealingNY
+005CNY0002_DealingNYAgr
+005CNY0003_DealingNYHban
+003CP0001_ProxyNA
+
+);
+
+
+my @dailydirs;
+
+
+foreach my $dir (@alldirs) {
+  my $found = 0;
+  foreach my $checkdir (@knowndirs) {
+    $found = 1 if $checkdir eq $dir;
+  }
+  push @dailydirs, $dir unless $found;
+}
+
+
+foreach my $dir (@dailydirs) {
+
+  my $lsdir = $dirbase . "\\$dir";
+
+  my @result = `$LS -l $lsdir`;
+
+  my @filelist = ();
+
+  for (@result) {
+
+    next if ( /MAC_XMLREPORT/ or /logs.zip$/ );
+
+    my $file = (split(/\s+/, $_))[-1];
+    my $type = (split(/_/, $file))[0];
+    # print "type is $type\n";
+
+    next if ( $type =~ /^001CS/ );
+
+    if ( /tpe$/i or /zip$/i or /temp$/i ) {
+      push(@filelist, $_);
+    }
+
+  }
+
+
+  if ($filelist[0]) {
+
+    print "$lsdir\n\n";
+
+    my %temp_file_list;
+
+    for (@filelist) {
+
+      my $filename = (split)[-1];
+      my $fname = (split(/\./, $filename))[0];
+
+      next if exists $temp_file_list{$fname};
+      $temp_file_list{$fname} = "done";
+
+      print "known failed file\n" if exists $known_failed{$filename};
+
+      print "$_";
+
+      my $info = get_status($fname);
+
+      if (@{$info}) {
+        for (@{$info}) { print "$_\n"; }
+      }
+
+      my $recent_info = @{$info}[0];
+      my $last_status = (split(/, /, $recent_info))[-1];
+
+      unless ($last_status == 999) {
+
+        # split job number from dir name, use jobnum_file and dir as hash pair
+        print "dir is $dir, filename $filename\n";
+        my $jnum = (split(/_/, $dir))[0];
+        my $jfname = $jnum . "_" . $filename;
+
+        unless (exists $known_failed{$filename}) {
+
+          if ($failed_today{$jfname} eq $dir) {
+            print "file already listed in today's list\n";
+          } else { 
+            print "notifying on file, adding to today's list\n";
+
+            my $restart = 1;
+
+            my ($job_name, $run_number, $start_time, $end_time, $machine, $status) = split(/, /, $recent_info);
+
+            print "$job_name, $run_number, $start_time, $end_time, $machine, $status\n";
+
+            print F "$jfname $dir $job_name $run_number $status\n";
+
+            # add all these so they're re-written at the end if filenames removed from list
+            $failed_today{$jfname} = $dir;
+            $failed_today{"$jfname job"} = $job_name;
+            $failed_today{"$jfname run"} = $run_number;
+            $failed_today{"$jfname status"} = $status;
+            # use status for restart count, ?
+
+            # push @mailbody, "$lsdir";
+            my $linkdir = $lsdir;
+            $linkdir =~ s/^r:/\\\\fp1\\resource/i;
+            # push @mailbody, "$linkdir";
+            # push @mailbody, "";
+
+            push @mailbody, "$filename";
+            for (@{$info}) { push @mailbody, "$_" }
+            # push @mailbody, "";
+
+            if ($start_time) {
+
+              my $filestsec = str2time($start_time);
+              my $diffsec = $stsec - $filestsec;
+              print "file started $diffsec ago, $stsec - $filestsec\n";
+              my $diffmin = 0; $diffmin = int($diffsec / 60);
+              my $remain = 0; $remain = $diffsec - ( $diffmin * 60 );
+              push @mailbody, "file started $diffmin minutes and $remain seconds ago"; 
+
+              if ($end_time =~ /\/1900/) {
+                push @mailbody, "end time wasn't updated";
+              } else {
+                my $fileendsec = str2time($end_time);
+                my $diffsec = $stsec - $fileendsec;
+                my $diffmin = 0; $diffmin = int($diffsec / 60);
+                my $remain = 0; $remain = $diffsec - ( $diffmin * 60 );
+
+                if ($diffsec &lt; 10 * 60) { 
+                  push @mailbody, "run ended less than 10 minutes ago"; 
+                } else { 
+                  push @mailbody, "run ended $diffmin minutes and $remain seconds ago"; $restart = 0; 
+                }
+
+              }
+
+              push @mailbody, $linkdir;
+
+              my $logdir = $linkdir . "\\logs";
+
+              if ($job_name =~ /sample/i) {
+                print "sample, logdir is $logdir\n";
+                push @mailbody, $logdir;
+                # get runtime prefix, grep filebase 
+                # or are failed logs all in local dirs now ?
+              } else {
+                my $lglob = $logdir . "\\*_${run_number}_*";
+                print "\nprint, glob is $lglob\n";
+                my @logs = glob($lglob);
+                if ($logs[0]) {
+                  for (@logs) { print "log $_\n"; push @mailbody, $_ }
+                } else {
+                  push @mailbody, "no log file found in $logdir";
+                }
+                # get latest one, ?
+                #
+              }
+
+              my $machdir = "\\\\$machine\\e\$\\temp";
+              push @mailbody, $machdir;
+
+              my $fn = (split(/\./, $filename))[0];
+              if ($job_name =~ /sample/i) {
+
+                my $zfn = "\\\\fp1\\resource\\release\\$fn*";
+                my @zips = glob($zfn);
+                if ($zips[0]) {
+                  for (@zips) { push @mailbody, $_ }
+                } else {
+                  push @mailbody, "no zip file in release dir \\\\fp1\\resource\\release";
+                }
+                
+                # check for sample entry
+                # have to add the other db handle for this,
+                my $dbh2 = localGet_db_handle2();
+                my @fields = qw( Job_Filename Job_Id Reason_Id File_Datetime );
+                my $fields = join(", ", @fields);
+                my $query = "select $fields from dbo.notificationjobfiles where job_filename like '%$fn%'";
+                my $l = localGet_info_hash($query, $dbh2, \@fields);
+   
+                if ($l-&gt;[0]-&gt;{'Reason_Id'}) {
+
+                  push(@mailbody, "sample entry found", $fields);
+
+                  # query again to get reason text
+
+                  for my $row (@$l) {
+                    my $rowstring;
+                    for my $k (@fields) { $rowstring .= $row-&gt;{$k} . "\t"; }
+                    print "print row $rowstring\n";
+                    push @mailbody, $rowstring;
+                  } 
+
+                  # always restart if failed, deleted, ?
+
+                  # if zip file is in release dir and tpe file is in process dir, no restart
+                  # scrip sent file twice, ?  anything inconsistent basically
+                  # reason id for sample entry,
+                  # flag multiple entries, same file different dirs or run manually, no dir prefix
+
+                  my $rquery = "select reason_description from notificationreasons where reason_id = $l-&gt;[0]-&gt;{'Reason_Id'}";
+                  my $rl = localGet_info($rquery, $dbh2, "reason_description");
+                  print "reason is $rl-&gt;[0]\n";
+                  push @mailbody, "status is $rl-&gt;[0]";
+
+                  # only delete the r:/ entry if restarting
+
+
+                } else {
+                  push @mailbody, "no sample entry found for $fname";
+                }
+                $dbh2-&gt;Close();
+
+
+              # not a sample job name,
+              } else {
+
+                my @ljt = `perl $listjobtracking $fn`;
+
+                # drop first blank line,
+                # my $ii = -1; for (@ljt) { $ii++; next unless $ii; print "$_"; chomp(); push @mailbody, $_; }
+                # query rows directly and print queued or not
+                # use query from ljt output, lol?
+                # this level would be 8 tabs across the page
+								# here
+                my @qlog = grep(/job_log/i, @ljt);
+                my @qtrk = grep(/job_tracking/i, @ljt);
+
+                # push @mailbody, "query for job log is --&gt;$qlog[0]&lt;--";
+                # push @mailbody, "query for job tracking is --&gt;$qtrk[0]&lt;--";
+
+                # have to set up get*() as lib file,
+                # add the new subs to jobsdb.pm, should be $dbh-&gt;get_info_hash() here,
+                my $fields = "Run_Number, Job_Name, Total_Sets, Date_Time, Region, Print_Status";
+                my @fields = split(/, /, $fields);
+                my $dbh2 = localGet_db_handle();
+                my $l = localGet_info_hash($qtrk[0], $dbh2, \@fields);
+                if ($l-&gt;[0]-&gt;{'Run_Number'}) {
+
+                  push(@mailbody, "                              PRINT FILES WERE QUEUED", $fields);
+                  for my $row (@$l) {
+                    my $rowstring;
+                    for my $k (@fields) { $rowstring .= $row-&gt;{$k} . "\t"; }
+                    print "print row $rowstring\n";
+                    push @mailbody, $rowstring;
+                  } 
+
+                  my $ars = "\\\\fp1\\resource\\Archives\\Contract_Runs";
+                  my $adir = $ars . "\\$job_name\\Run_${run_number}";
+                  push @mailbody, "archive dir is $adir";
+
+                  # print rows found so,
+                  $restart = 0;
+
+                } else {
+                  $qlog[0] .= " and job_name not like '%sample'";
+                  my $l = localGet_info($qlog[0], $dbh2, "run_number");
+                  my $runlist = join(", ", @$l);
+                  push @mailbody, "no print rows found for $job_name $runlist";
+                }
+                $dbh2-&gt;Close();
+
+                # check for file signature
+                my $query = "select job_name from file_signatures where file_name like '$fn%'";
+                print "$query\n";
+                my $rs = $dbh-&gt;ExecuteQuery($query);
+                my $jnam = $rs-&gt;Fields('Job_Name')-&gt;{'value'};
+                if ($jnam) {
+                  push @mailbody, "file signature listed for $fn% under $jnam";
+                } else {
+                  push @mailbody, "no file signature found";
+                }
+
+              }
+
+              # print trigger dir for $job is, \\
+              my $tquery = "select directory from job_triggers where job_name like '$job_name'";
+              my $rs = $dbh-&gt;ExecuteQuery($tquery);
+              my $tdir = $rs-&gt;Fields('Directory')-&gt;{'value'};
+              $tdir =~ s/^r:/\\\\fp1\\resource/i;
+              push @mailbody, "$job_name trigger dir is $tdir\n";
+
+
+              # checklist for each type
+
+
+            } else {
+              push @mailbody, "no sample or print runs listed"; $restart = 0;
+              push @mailbody, $linkdir;
+              push @mailbody, "" ;
+            }
+
+            # doublespace between files,
+            push(@mailbody, "", "");
+
+            # add first field of name to list for mail subject
+            my ($id, $other, $j) = split(/_/, $filename);
+            if ($id =~ /notice/i or $id =~ /scripc/i) { $id = $id . "_" . $other }
+            push @id_list, $id;
+
+          }
+
+          print "\n";
+
+        }
+
+      }
+
+
+    }
+
+  print "----------------------------------------------------------------\n\n";
+
+  }
+
+}
+
+
+close(F);
+
+
+
+# now check all todays files,
+# if any are gone, report
+# and rewrite F without the entry
+
+# break down above into sample_info() print_info(), ?
+# because the same checks have to be run again for these,
+# is it a sample, print, anything queued, list zip file, ?
+
+my $redo = 0;
+
+for my $jfname (sort keys %failed_today) {
+
+  next if ($jfname =~ / /);
+
+  my $jnum = (split(/_/, $jfname))[0];
+
+  my $filename = $jfname;
+
+  $filename =~ s/^${jnum}_//;
+
+  my $pdir;
+  for (@alldirs) { $pdir = $_ if ($_ =~ /$jnum/) }
+
+  print "$jfname, checking $jnum for $filename, $pdir\n";
+
+  my $fdir = "\\\\fp1\\resource\\Contracts\\perlContracts\\CDSUSA_002CD\\$pdir";
+  my $fname = "$fdir\\$filename";
+
+  print "fname $fname, ";
+
+  my @fl = glob($fname);
+
+  if ($fl[0]) { 
+    print "still in dir\n";
+  } else {
+    print "not in dir\n";
+    # rewrite F with next if file
+    $failed_today{"$jfname exists"} = "no";
+    $redo++;
+    push @mailbody, "$filename not in dir,";
+    push @mailbody, $fdir;
+    my $jobrun = $failed_today{"$jfname job"} . " " . $failed_today{"$jfname run"};
+    if ($jobrun eq " ") {
+      push @mailbody, "no run info listed";
+    } else {
+      push @mailbody, "last run was $jobrun";
+      if ($failed_today{"$jfname job"} =~ /sample/i) {
+        print "sample run\n";
+
+
+      } else {
+        print "checking print output\n";
+
+
+      }
+    }
+
+    push @mailbody, "";
+
+  }
+
+}
+
+
+if ($redo) {
+  print "rewriting failed files list for $redo files\n";
+
+  my $newlog = "tmp/newfailedfileslog.txt";
+  open(F, "&gt; $newlog");
+  for my $jfname (sort keys %failed_today) {
+    next if ($jfname =~ / /);
+    next if ($failed_today{"$jfname exists"} eq "no");
+    my $string = $jfname . " " 
+               . $failed_today{$jfname} . " "
+               . $failed_today{"$jfname job"} . " "
+               . $failed_today{"$jfname run"} . " "
+               . $failed_today{"$jfname status"} . " ";
+    print F "$string\n";
+  }
+  close(F);
+
+  my $flg = $failedlist . "*";
+  my @logs = glob($flg);
+
+  my $lc = $#logs;
+  $lc += 2;
+
+  print "moving log to log-$lc\n";
+  my $oldlog = $failedlist . $lc;
+
+  print  "mv $failedlist $oldlog\n";
+  system("$MV $failedlist $oldlog");
+
+  print  "mv $newlog $failedlist\n";
+  system("$MV $newlog $failedlist");
+
+}
+
+
+send_mail( \@mailbody, \@id_list ) if @mailbody;
+
+
+# sleep 5;
+
+
+# ---------------------------------------------------------------------------------------
+
+
+
+sub get_status {
+
+  my $fname = shift;
+
+  my @info;
+
+  my $query = "select * from job_log where (short_file_name like '". $fname . "%') order by start_date_time desc";
+
+  my $rs = $dbh-&gt;ExecuteQuery($query);
+
+  while (! $rs-&gt;EOF() ) {
+
+    my $job_name    = $rs-&gt;Fields('Job_Name')-&gt;{'value'};
+    my $run_number  = $rs-&gt;Fields('Run_Number')-&gt;{'value'};
+    my $start_time  = $rs-&gt;Fields('Start_Date_Time')-&gt;{'value'};
+    my $end_time    = $rs-&gt;Fields('End_Date_Time')-&gt;{'value'};
+    my $status      = $rs-&gt;Fields('Return_Code')-&gt;{'value'};
+    my $machine     = $rs-&gt;Fields('Machine')-&gt;{'value'};
+
+    my $string = "$job_name, $run_number, $start_time, $end_time, $machine, $status";
+
+    push @info, $string;
+
+    $rs-&gt;MoveNext();
+
+  }
+
+  return \@info;
+
+}
+
+
+
+sub send_mail {
+
+  my $body = shift;
+
+  my $ids = shift;
+
+  my $hname = `hostname`;
+  chomp($hname);
+  my $hostname = lc($hname);
+
+  my $subject = "test mail, possible failed files";
+
+  my $scriptname = $0;
+
+
+  for (@{$ids}) { $subject .= ", $_"; }
+
+  print "$subject\n";
+
+  for (@{$body}) { print "$_\n"; }
+
+
+  my %send = (
+    from           =&gt;   $hostname,
+    fromdispname   =&gt;   $hostname,
+    to             =&gt; [ "Support\@employer.com" ],
+    recipients     =&gt; [ "#Support" ],
+    subject        =&gt;   "$subject",
+    body           =&gt; [ "", "", "", @{$body},
+                        "", "this mail is from $scriptname", "" ]
+    );
+
+  my $ret = CdsSmtp::SendMail(\%send);
+
+  print "return value of mail is $ret\n";
+
+}
+
+#   body           =&gt; [ "", "", "  These files are in the process dirs with job_log status != 999,",
+
+
+sub localGet_info {
+
+  my ($query, $connection, $field) = @_;
+
+  my @list;
+
+  my $rs = localExecuteQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    push(@list, $rs-&gt;Fields($field)-&gt;{'value'} );
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub localGet_info_hash {
+
+  my ($query, $connection, $fields) = @_;
+
+  my @list;
+
+  my $rs = localExecuteQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    my %row;
+    for my $field (@{$fields}) {
+      $row{$field} = $rs-&gt;Fields($field)-&gt;{'value'};
+    }
+    push(@list, \%row);
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+# separate handle for sample file entry, should update jobsdb.pm also
+
+sub localGet_db_handle {
+
+  my $server = 'server\CDS';
+
+  my $database = 'Database';
+  my $user     = 'user';
+  my $passwd   = 'password';
+
+  # my $database = 'Database';
+  # my $user     = 'User';
+  # my $passwd   = 'password';
+
+  my $dsn = "Provider=SQLOLEDB.1;Password=$passwd;Persist Security Info=False;";
+  $dsn   .= "User ID=$user;Initial Catalog=$database;Data Source=$server;";
+
+  my $connection = Win32::OLE-&gt;new('ADODB.Connection') or die "Cannot get new connection: $!";
+
+  $connection-&gt;Open($dsn);
+
+  return $connection;
+
+}
+
+
+
+sub localGet_db_handle2 {
+
+  my $server = 'server\CDS';
+
+  my $database = 'Database2';
+  my $user     = 'user';
+  my $passwd   = 'password';
+
+  my $dsn = "Provider=SQLOLEDB.1;Password=$passwd;Persist Security Info=False;";
+  $dsn   .= "User ID=$user;Initial Catalog=$database;Data Source=$server;";
+
+  my $connection = Win32::OLE-&gt;new('ADODB.Connection') or die "Cannot get new connection: $!";
+
+  $connection-&gt;Open($dsn);
+
+  return $connection;
+
+}
+
+
+
+sub localExecuteQuery {
+
+  my $query = shift;
+  my $connection = shift;
+
+  my $record_set = Win32::OLE-&gt;new('ADODB.Recordset');
+
+  $record_set = $connection-&gt;Execute($query);
+
+  if(! $record_set ) {
+    print     "error: " . Win32::OLE-&gt;LastError();
+    print LOG "error: " . Win32::OLE-&gt;LastError();
+  }
+
+  return $record_set;
+
+}
+
+
+
+# add files here that are in the dirs for no reason, or failed years ago etc
+# or delete them from the dirs
+
+
+__DATA__
+
+
+</pre><html>

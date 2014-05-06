@@ -1,0 +1,72 @@
+#!/usr/bin/perl
+
+# dave toal
+
+# tabeeb.js has filenames of each file as comments
+# files were appended to tabeeb.js by the build script
+
+# get file names from tabeeb.js,
+# list lines with "^function" under each file name
+
+my $infile = "tabeeb-nov-15.js";
+my $outfile = "tabeeb-file-functions.txt";
+
+open( O, "> $outfile" );
+open( I, "< $infile" );
+
+while ( my $line = <I> ) {
+
+  # //---- case-events-functions.js globals ----
+  # //---- case-objects.js ----------------------------
+  # function get_case_info(case_id) {
+
+  if (    ( ( $line =~ /\/\/----/ ) && ( $line !~ /globals ----/ ) ) 
+       || ( $line =~ /^function/ )   
+     ) {
+
+    if ( $line =~ /^function/ ) {
+
+      $line =~ s/^function/       /;
+      $line =~ s/{//;
+
+    } else {
+
+      $line =~ s/^\/\/---- /\n/;
+      $line =~ s/ -+//;
+
+    }
+
+    print O $line;
+
+  }
+
+}
+
+
+__END__
+
+-rw-rw-r-- 1 dave dave 356410 Oct  5 13:14 tabeeb.js
+-rw-rw-r-- 1 dave dave    261 Oct 20 19:50 test-tags-animation.html
+-rw-rw-r-- 1 dave dave   2996 Oct 20 22:47 test-tags-animation.js
+-rw-rw-r-- 1 dave dave 511188 Nov 16 13:55 tabeeb-nov-15.js
+dave@xxxx:~/javascript$ wc -l tabeeb-nov-15.js
+18197 tabeeb-nov-15.js
+dave@xxxx:~/javascript$ wc -w tabeeb-nov-15.js
+48345 tabeeb-nov-15.js
+dave@xxxx:~/javascript$ grep -v "^$" tabeeb-nov-15.js | grep -v // | grep -v "^}$" | wc -l
+8673
+dave@xxxx:~/javascript$ grep -v "^$" tabeeb-nov-15.js | grep -v // | wc -l
+8865
+dave@xxxx:~/javascript$ expr 8865 - 8673
+192
+dave@xxxx:~/javascript$ grep "^function " tabeeb-nov-15.js | wc -l
+195
+dave@xxxx:~/javascript$ egrep "^ +if " tabeeb-nov-15.js | wc -l
+586
+dave@xxxx:~/javascript$ grep -v "^$" tabeeb-nov-15.js | grep -v // | wc -w
+36370
+dave@xxxx:~/javascript$ expr 48345 - 36370
+11975
+dave@xxxx:~/javascript$ grep // tabeeb-nov-15.js | wc -w
+11975
+

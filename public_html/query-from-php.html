@@ -1,0 +1,40 @@
+<html>
+<head>
+
+<title>call php from javascript</title>
+
+<script language="JavaScript" src="http://dtoal.net/php-query.php?query=australia"></script>
+
+
+<script> queryResults('{"seg":"australia","count":"5"}'); </script>
+
+
+
+<script>
+
+  function queryResults(data) {
+
+    document.write("result from calling http://dtoal.net/php-query.php?query=australia is \n");
+
+    document.write(data);
+
+    var results = JSON.parse(data);
+
+    document.write("<p>Name = " + results.seg + "</p>");
+
+    document.write("<p>Email = " + results.count + "</p>");
+
+  }
+
+</script>
+
+</head>
+
+
+<body>
+
+</body>
+
+
+</html>
+

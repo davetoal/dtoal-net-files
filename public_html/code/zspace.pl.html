@@ -1,0 +1,774 @@
+<html><head><title>zspace.pl</title></head>
+<pre>
+#!/usr/bin/perl
+
+
+# dave toal 256 2k4
+# window onto pixel space, 
+# nav and rot buttons
+#
+#           [up]  [forward]
+# [left]   [home]   [right]
+#  [back]  [down]
+#
+# [z ccw]  [x ccw] 
+# [y ccw]           [y cw]
+#          [x cw]   [z cw]
+#
+
+
+use strict;
+use Tk;
+
+require "matrix.pl";
+# amult, array x point multiply fn
+
+require "read-nff.pl";
+# read_nff fn, returns ref to hash
+# numpts, numlns, px1 py1 pz1, numl1, l11 l12 l13 .. l1n
+# all lines are edges of closed polys
+
+# require "rotate-and-draw.pl";
+# map xyz to xy of viewport
+
+
+my $xpos = 0;
+my $ypos = 0;
+my $zpos = 0;
+ 
+my $xrot = 0;
+my $yrot = 0;
+my $zrot = 0;
+ 
+my $step = 10; 
+my $rotstep = 10; 
+
+my $conv = (2 * 3.1415926) / 360;
+
+my $scf = 1;
+# global object scale factor
+
+my $ref;
+my ($ref2, $f2);
+# reference to object hash
+
+
+my $top1 = MainWindow-&gt;new();
+$top1-&gt;title("nav and map");
+
+my $top2 = MainWindow-&gt;new();
+$top2-&gt;title("viewport");
+
+# $top1-&gt;overrideredirect(1);
+
+my $width = 1000;
+my $height = 700;
+# is 12 inches by 8 and 1/4
+
+my $canv = $top2-&gt;Canvas( width =&gt; $width, height =&gt; $height,
+                          relief =&gt; 'groove', borderwidth =&gt; 4,
+                          bg =&gt; '#c4c0a4' );
+$canv-&gt;pack();                        
+
+
+my $xf = $width / 12.0;
+my $yf = $height / 8.25;
+my $zf = ( $xf + $yf ) / 2;
+# pixels/inch
+
+my $ix = 0;
+my $iy = 0;
+my $iz = 28.0 * $zf;
+# eye x,y,z for viewpoint plane.
+# objects are clipped to z &gt;= 0 and ratio of z 
+#   by xy of /.\ view frustrum
+# iz is the height of the eye view triangle at cx cy on the screen.  
+# ratio of iz to iz + z gives dx dy from px py.  same method for 
+# clipping frustrum, ratio of dx dy at z depth.
+
+
+my $cx = $width / 2;
+my $cy = $height / 2;
+# viewport cx cy
+
+# canvas for nav toolpage map
+my $cw = 293;
+my $ch = 160;
+my $bw = 5;
+
+my $toolpage = $top1-&gt;Canvas( -height =&gt; $ch , -width =&gt; $cw, -relief =&gt; "ridge",
+                              -borderwidth =&gt; $bw ) -&gt; pack( -side =&gt; "top", -anchor =&gt; "n",
+                                                             -padx =&gt; 10, -pady =&gt; 10 );
+
+# under the navmap, a frame for button sets
+# my $buttonframeheight = 116;
+my $buttonframeheight = 142;
+
+# my $buttonframeheight = 182;
+# add scale for log steps on move
+# instead of buttons for steps
+
+
+my $fbw = 2;
+my $frame1 = $top1-&gt;Frame( -width =&gt; $cw, -height =&gt; $buttonframeheight,
+                           -relief =&gt; "sunken", -background =&gt; "grey",
+                           -borderwidth =&gt; $fbw ) -&gt; pack( -side =&gt; "bottom", -anchor =&gt; "s",
+                                                           -padx =&gt; 10, -pady =&gt; 10 );
+#           [up]  [forward]
+# [left]   [home]   [right]
+#  [back]  [down]   
+
+my $by1 = 10;
+my $by2 = 41;
+my $by3 = 72;
+my $by4 = 103;
+my $by5 = 134;
+
+$frame1-&gt;Button( -text =&gt; "U", -command =&gt; \&moveup )    -&gt; place ( -x =&gt; 48, -y =&gt; $by1 ); 
+$frame1-&gt;Button( -text =&gt; "B", -command =&gt; \&moveback )  -&gt; place ( -x =&gt; 86, -y =&gt; $by1 );  
+$frame1-&gt;Button( -text =&gt; "L", -command =&gt; \&moveleft )  -&gt; place ( -x =&gt; 12, -y =&gt; $by2 );  
+$frame1-&gt;Button( -text =&gt; "H", -command =&gt; \&movehome )  -&gt; place ( -x =&gt; 48, -y =&gt; $by2 );  
+$frame1-&gt;Button( -text =&gt; "R", -command =&gt; \&moveright ) -&gt; place ( -x =&gt; 86, -y =&gt; $by2 );  
+$frame1-&gt;Button( -text =&gt; "F", -command =&gt; \&movefwd )   -&gt; place ( -x =&gt; 11, -y =&gt; $by3 );  
+$frame1-&gt;Button( -text =&gt; "D", -command =&gt; \&movedown )  -&gt; place ( -x =&gt; 48, -y =&gt; $by3 );  
+
+$frame1-&gt;Button( -text =&gt; ".", -command =&gt; \&moveacidbath ) -&gt; place ( -x =&gt; 122, -y =&gt; $by1 );  
+
+sub moveup    { print "move up\n";             $ypos += $step; redraw(); }
+sub movedown  { print "move down\n";           $ypos -= $step; redraw(); } 
+sub moveleft  { print "move left\n";           $xpos -= $step; redraw(); } 
+sub moveright { print "move right\n";          $xpos += $step; redraw(); } 
+sub moveback  { print "move z neg, forward\n"; $zpos += $step; redraw(); } 
+sub movefwd   { print "move z pos, back\n";    $zpos -= $step; redraw(); } 
+sub movehome  { print "move home\n";           $xpos = 0; $ypos = 0; $zpos = 0; redraw(); } 
+
+# redraw at x 0 y 600 z 30  xr -61 yr 0 zr 180
+sub moveacidbath { 
+  print "move to acidbath demo position\n"; 
+  $xpos = 0; $ypos = 600; $zpos = 30; 
+  $xrot = -61; $yrot = 0; $zrot = 180;
+  redraw(); 
+} 
+
+
+
+# [z ccw]  [x ccw]
+# [y ccw]           [y cw]
+#          [x cw]   [z cw]  
+
+
+$frame1-&gt;Button( -text =&gt; "Z-", -command =&gt; \&decz )    -&gt; place ( -x =&gt; 153, -y =&gt; $by1 );
+$frame1-&gt;Button( -text =&gt; "X-", -command =&gt; \&decx )    -&gt; place ( -x =&gt; 194, -y =&gt; $by1 );
+$frame1-&gt;Button( -text =&gt; "Y-", -command =&gt; \&decy )    -&gt; place ( -x =&gt; 151, -y =&gt; $by2 );
+$frame1-&gt;Button( -text =&gt; "rH", -command =&gt; \&xyzhome ) -&gt; place ( -x =&gt; 194, -y =&gt; $by2 );
+$frame1-&gt;Button( -text =&gt; "Y+", -command =&gt; \&incy )    -&gt; place ( -x =&gt; 238, -y =&gt; $by2 );
+$frame1-&gt;Button( -text =&gt; "X+", -command =&gt; \&incx )    -&gt; place ( -x =&gt; 194, -y =&gt; $by3 );
+$frame1-&gt;Button( -text =&gt; "Z+", -command =&gt; \&incz )    -&gt; place ( -x =&gt; 238, -y =&gt; $by3 ); 
+
+
+sub decz { print "rotate z-\n"; $zrot -= $rotstep; redraw(); }
+sub decy { print "rotate y-\n"; $yrot -= $rotstep; redraw(); }
+sub decx { print "rotate x-\n"; $xrot -= $rotstep; redraw(); }
+sub incz { print "rotate z+\n"; $zrot += $rotstep; redraw(); }
+sub incy { print "rotate y+\n"; $yrot += $rotstep; redraw(); }
+sub incx { print "rotate x+\n"; $xrot += $rotstep; redraw(); }
+
+sub xyzhome { print "xyz home\n"; $xrot = 0; $yrot = 0; $zrot = 0; redraw(); }
+
+
+$frame1-&gt;Button( -text =&gt; "exit", -command =&gt; \&exitfn ) -&gt; place ( -x =&gt; 10, -y =&gt; $by4 );
+
+sub exitfn { print "\nexit called, bye\n\n"; exit 0; }
+
+
+my $mvs;
+
+$mvs = $frame1-&gt;Scale( -from =&gt; 1, -to =&gt; 16, -orient =&gt; 'horizontal',
+                       -showvalue =&gt; 0, -background =&gt; "grey", -length =&gt; 204,
+                       -command =&gt; \&updatestep, -troughcolor =&gt; "grey" )
+              -&gt; place ( -x =&gt; 66, -y =&gt; $by4 + 2 );
+
+
+
+sub getunits {
+
+  my ($size) = @_;
+
+  my ($unit, $measure, $ms, $sz);
+
+  $sz = abs($size);
+
+  $measure = $size, $unit = "inches"                if ($sz &lt; 13);
+  $measure = $size / 12, $unit = "feet"             if (($sz &gt; 13) and ($sz &lt; 37));
+  $measure = $size / 36, $unit = "yards"            if (($sz &gt; 37) and ($sz &lt; 63360));
+  $measure = $size / 63360, $unit = "miles"         if (($sz &gt; 63360) and ($sz &lt; 502217337.60));
+  $measure = $size / 502217337.60, $unit = "earths" if (($sz &gt; 502217337.60) and ($sz &lt; 5892480000000));
+  $measure = $size / 5892480000000, $unit = "a.u."  if ($sz &gt; 5892480000000);
+
+  $ms = (int($measure * 10) / 10);
+
+  return($ms, $unit);
+
+  # ($ms, $unit) = getunits($size);
+
+}
+
+
+ 
+sub updatestep { 
+
+  my $sval = $mvs-&gt;get(); 
+  my $p = 1;
+  my ($i, $j, @text, $js, $size, $measure, $unit, $ms,
+      $ax, $ay, $az, $bx, $by, $bz, 
+      $ax, $ay, $bx, $by );
+
+  $j = $sval * 1;
+
+  for ($i = 0; $i &lt; $j; $i++) {
+    $p = $p * 10;
+  }
+  # 10 ^ $sval?
+
+  $step = $p;
+  $size = (int(($p / $zf) * 10) / 10);
+
+  ($ms, $unit) = getunits($size);
+
+  print "scale value is $sval, $ms $unit, p is $p, j is $j\n"; 
+
+  $toolpage-&gt;delete("movestep");
+  $toolpage-&gt;createText(200, 130, -text =&gt; "scale $sval, move $p pixels", -tags =&gt; "movestep" );
+  $toolpage-&gt;createText(200, 150, -text =&gt; "$ms $unit", -tags =&gt; "movestep" );
+
+
+  # draw crux of rotation on viewport
+
+  $js = 100;
+
+  # vert
+  $ax = 0; $bx = 0;
+  $ay = $js; $by = -$js;
+  $az = 0; $bz = 0;
+
+  # horiz
+  $ax = -$js; $bx = $js;
+  $ay = 0; $by = 0;
+  $az = 0; $bz = 0;
+
+  # along
+  $ax = 0; $bx = 0;
+  $ay = 0; $by = 0;
+  $az = -$js; $bz = $js;
+
+  # now draw these rotated only, not moved
+  # from xyz on toolpage
+
+  # have to call draw fns, dl is pointed at the canvas
+}
+
+
+
+
+$frame1-&gt;Button( -text =&gt; "1", -command =&gt; \&rotstep1 )  -&gt; place ( -x =&gt; 86, -y =&gt; $by3 );
+sub rotstep1 { print "rotstep set to 1\n"; $rotstep = 1; }
+
+$frame1-&gt;Button( -text =&gt; "0", -command =&gt; \&rotstep10 ) -&gt; place ( -x =&gt; 122, -y =&gt; $by3 );
+sub rotstep10 { print "rotstep set to 10\n"; $rotstep = 10; }
+
+$frame1-&gt;Button( -text =&gt; "9", -command =&gt; \&rotstep90 ) -&gt; place ( -x =&gt; 158, -y =&gt; $by3 );
+sub rotstep90 { print "rotstep set to 90\n"; $rotstep = 90; }
+
+
+
+
+my $groundplane = 1;
+
+$frame1-&gt;Button( -text =&gt; "+", -command =&gt; \&toggleground ) -&gt; place ( -x =&gt; 12, -y =&gt; $by1 );
+sub toggleground { 
+  if ($groundplane) { 
+    $groundplane = 0; 
+    print "ground off\n";
+    redraw();
+  } else { 
+    $groundplane = 1;
+    print "ground on\n";
+    redraw();
+  }
+}
+
+
+
+my $globalmove = 0;
+
+$frame1-&gt;Button( -text =&gt; "g", -command =&gt; \&togglegmove ) -&gt; place ( -x =&gt; 236, -y =&gt; $by1 );
+sub togglegmove {
+  if ($globalmove) {
+    $globalmove = 0;
+    print "global movement off\n";
+    redraw();
+  } else {
+    $globalmove = 1;
+    print "global movement on\n";
+    redraw();
+  }
+}
+
+# callback to sub that exits if 0, adds last vector and redraws if 1
+
+
+sub rotatept {
+
+  my ($x, $y, $z, $xrot, $yrot, $zrot) = @_;
+  # this one returns point rotated to xyzrot
+
+  my ($nx, $ny, $nz);
+
+}
+
+
+
+# just pass the globals from the parent, duh
+
+sub rotateglobalpt {
+
+  # my ($x, $y, $z, $xrot, $yrot, $zrot) = @_;
+  my ($x, $y, $z) = @_;
+  # rotate to global xyzrot
+  
+  my ($nx, $ny, $nz);
+  # return rotated point
+
+  my ($cxrot, $cyrot, $czrot);
+  # xrot &c are global
+  # check difference in speed vs
+  # referencing the global
+  # vs passing in 3pt
+  # for now, reference the global,
+  # because the current one does.
+
+  my ($sinxrot, $sinyrot, $sinzrot,
+      $cosxrot, $cosyrot, $coszrot);
+  # elements for rotation arrays
+
+  my (@xrot, @yrot, @zrot); 
+  # rotation arrays
+
+  my ($ref, $a, $b, $c);
+  # reference to rotation array
+  # 3pt for xyz passed to amult
+  # (nxyz) = (amult($r, $xyz)); ?
+
+  $cxrot = $xrot * $conv; $cyrot = $yrot * $conv; $czrot = $zrot * $conv;
+
+  $sinxrot = sin($cxrot); $sinyrot = sin($cyrot); $sinzrot = sin($czrot);
+  $cosxrot = cos($cxrot); $cosyrot = cos($cyrot); $coszrot = cos($czrot);
+
+  @xrot = ( [ 1,         0,        0 ],
+            [ 0,  $cosxrot, $sinxrot ],
+            [ 0, -$sinxrot, $cosxrot ] );
+
+  @yrot = ( [ $cosyrot, 0, -$sinyrot ],
+            [ 0,        1,         0 ],
+            [ $sinyrot, 0,  $cosyrot ] );
+
+  @zrot = ( [  $coszrot, $sinzrot, 0 ],
+            [ -$sinzrot, $coszrot, 0 ],
+            [ 0,         0,        1 ] );
+
+  $ref = \@xrot;
+  ($a, $b, $c) = amult($ref, $x, $y, $z);
+  ($x, $y, $z) = ($a, $b, $c);
+
+  $ref = \@yrot;
+  ($a, $b, $c) = amult($ref, $x, $y, $z);
+  ($x, $y, $z) = ($a, $b, $c);
+
+  $ref = \@zrot;
+  # ($a, $b, $c) = amult($ref, $x, $y, $z);
+  # # ($x, $y, $z) = ($a, $b, $c);
+  # # ($nx, $ny, $nz) = ($a, $b, $c);
+  # then did this instead, last rotated 3pt is returned
+  # ($a, $b, $c) = amult($ref, $x, $y, $z);
+
+  ($nx, $ny, $nz) = amult($ref, $x, $y, $z);
+
+  return ($nx, $ny, $nz);
+
+}
+
+
+
+sub drawpt {
+
+  my ($x, $y, $z) = @_;
+
+  my ($px, $py);
+
+  # iz, cx, cy, global
+  my ($longz, $dx, $dy);
+
+  # map rotated point to flat view plane
+  # return x,y on the viewport, for x,y,z in pixelspace
+
+  $longz = $z + $iz;
+
+  # so iz is a positive number, even though
+  # the eyes are on the other side of the viewport plane
+  # this is why it draws negative z inverted
+
+  $dx = ( $iz * $x ) / $longz;
+  $dy = ( $iz * $y ) / $longz;
+
+  $px = $dx + $cx;
+  $py = $cy - $dy;  # for z positive, screen coords are inverted
+
+  return($px, $py);
+  # return x y on viewport cx0 cy0
+
+}
+
+
+
+sub movept {
+
+  my ($x, $y, $z, $dx, $dy, $dz) = @_;
+  # takes 3pt xyz and returns x + dx &c
+
+  my ($nx, $ny, $nz);
+
+  $nx = $x + $dx; $ny = $y + $dy; $nz = $z + $dz;
+
+  return ($nx, $ny, $nz);
+
+}
+
+
+
+sub dl {
+
+  my ($ix, $iy, $iz, $jx, $jy, $jz) = @_;
+
+  my ($mix, $miy, $miz,
+      $mjx, $mjy, $mjz,
+      $rmix, $rmiy, $rmiz,
+      $rmjx, $rmjy, $rmjz,
+      $pix, $piy, 
+      $pjx, $pjy );
+
+  # z = 0 is the glass
+
+  ($mix, $miy, $miz) = movept($ix, $iy, $iz, $xpos, $ypos, $zpos);
+  ($mjx, $mjy, $mjz) = movept($jx, $jy, $jz, $xpos, $ypos, $zpos);
+
+  ($rmix, $rmiy, $rmiz) = rotateglobalpt($mix, $miy, $miz);
+  ($rmjx, $rmjy, $rmjz) = rotateglobalpt($mjx, $mjy, $mjz);
+
+  if ( ($rmiz &gt; 0) and ($rmjz &gt; 0) ) {
+
+    ($pix, $piy) = drawpt($rmix, $rmiy, $rmiz);
+    ($pjx, $pjy) = drawpt($rmjx, $rmjy, $rmjz);
+
+    $canv-&gt;create('line', $pix, $piy, $pjx, $pjy, -tags =&gt; "lines");
+  }
+
+}
+
+
+
+sub draw_object {
+
+  my ($ref) = @_;
+
+  my ($numpts, $numlns,
+      $px, $py, $pz,
+      $rax, $ray, $raz,
+      $rbx, $rby, $rbz,
+      $ax, $ay, $az,
+      $bx, $by, $bz,
+      $count, $l, $p, $q, @v,
+      $pref, $countref,
+      $aox, $aoy, $box, $boy,
+      $p1, $p2   );
+
+  $numpts = $$ref{'numpts'};
+  $numlns = $$ref{'numlns'};
+
+  print "redraw, object has $numpts points, $numlns lines\n";
+
+  # for l in lines
+  # get index of point number for each vertex
+  # draw with 0,1 1,2 2,3 3,0 calls to draw()
+
+  for ($l = 0; $l &lt; $numlns; $l++) {
+
+    # $rl = "numl$l";
+    $countref = "numl$l";
+    $count = $$ref{$countref};
+
+    # print "number of points in poly $l is $countref, $count\n";
+
+    for ($p = 0; $p &lt; $count; $p++) {
+
+      # $rp = "l_${l}_$e";
+      $pref = "l_${l}_$p";
+      $v[$p] = $$ref{$pref};
+      # print "p ref is $pref, point is number $v[$p]\n";
+
+    }
+
+    # points are assigned, now draw each poly
+    # for r 0, &lt; 3
+    # s = r + 1
+    # axyz = ref(ref(r)); bxyz = ref(ref(s));
+    # then do last to 0, outside loop
+
+    for ($p1 = 0; $p1 &lt; ($count - 1); $p1++) {
+
+      $p2 = $p1 + 1 ;
+      # print "p1 p2, drawing from $p1 to $p2, ";
+
+      $rax="px$v[$p1]"; $ray="py$v[$p1]"; $raz="pz$v[$p1]";
+      $rbx="px$v[$p2]"; $rby="py$v[$p2]"; $rbz="pz$v[$p2]";
+
+      $ax = $$ref{$rax}; $ay = $$ref{$ray}; $az = $$ref{$raz};
+      $bx = $$ref{$rbx}; $by = $$ref{$rby}; $bz = $$ref{$rbz};
+
+      $ax = $ax * $scf; $ay = $ay * $scf; $az = $az * $scf;
+      $bx = $bx * $scf; $by = $by * $scf; $bz = $bz * $scf;
+
+      dl($ax, $ay, $az, $bx, $by, $bz);
+
+    }
+
+    $p2 = 0;
+    # print "after loop, p1 is $p1, p2 is $p2, ";
+
+    $rax="px$v[$p1]"; $ray="py$v[$p1]"; $raz="pz$v[$p1]";
+    $rbx="px$v[$p2]"; $rby="py$v[$p2]"; $rbz="pz$v[$p2]";
+
+    $ax = $$ref{$rax}; $ay = $$ref{$ray}; $az = $$ref{$raz};
+    $bx = $$ref{$rbx}; $by = $$ref{$rby}; $bz = $$ref{$rbz};
+
+    $ax = $ax * $scf; $ay = $ay * $scf; $az = $az * $scf;
+    $bx = $bx * $scf; $by = $by * $scf; $bz = $bz * $scf;
+
+    dl($ax, $ay, $az, $bx, $by, $bz);
+
+  }
+
+}
+
+
+
+sub move_object {
+
+  # move_object($ref, $distance);
+
+  my ($ref, %dis) = @_;
+
+  my ($x, $y, $z);
+
+  ($x, $y, $z) = ($dis{"x"}, $dis{"y"}, $dis{"z"});
+
+  print "move object $x, $y, $z\n";
+
+  # for each point in object %nff, 
+  # add %dis to it.  no return value,
+  # points of the referenced hash are changed
+
+}
+
+# do another one, which returns new $ref to copy of object
+# moved by %distance
+
+
+
+
+sub rotate_object {
+
+  # rotate_object($ref, $xyzrot);
+
+  my ($ref, %xyz) = @_;
+
+  my ($x, $y, $z);
+
+  ($x, $y, $z) = ($xyz{"x"}, $xyz{"y"}, $xyz{"z"});
+
+  print "rotate object $x, $y, $z\n";
+
+}
+
+
+
+sub redraw {
+
+  print "redraw world at x $xpos y $ypos z $zpos  xr $xrot yr $yrot zr $zrot\n";
+
+  my ($rox, $roy, $tox, $toy,
+      $rpx, $rpy, $rpz,
+      $tpx, $tpy, $tpz, 
+      $ix, $iy, $iz,
+      $jx, $jy, $jz,
+      $g1x, $g1y, $g2x, $g2y,
+      $scale, $scalestep,
+      $gi, $gp, $gpr, $gix, $giy, $giz,
+      $xms, $yms, $zms, 
+      $xunit, $yunit, $zunit,
+      %dis2, %xyzrot2  );
+
+
+  $canv-&gt;delete("lines");
+
+  # ringworld surface, center of the ring is at y + .93 au
+  # width of the ring is 10 k miles in pixels
+  # prove pixel size by drawing a square 
+  #   in inches at the screen surface, z=0
+
+  if ($groundplane) {
+
+    # draw crux grid at powers of ten scales
+
+    $gpr = 1;
+
+    for ($gi = 1; $gi &lt; 17; $gi++) {
+
+      $gpr *= 10;
+
+      if ($gpr &lt;= $step) {
+
+        $gp = $gpr / 2;
+
+        # squares in xy plane
+        dl(-$gp, -$gp, 0, -$gp,  $gp, 0);
+        dl(-$gp,  $gp, 0,  $gp,  $gp, 0);
+        dl( $gp,  $gp, 0,  $gp, -$gp, 0);
+        dl( $gp, -$gp, 0, -$gp, -$gp, 0);
+
+        # xz plane
+        dl(-$gp, 0, -$gp, -$gp, 0,  $gp);
+        dl(-$gp, 0,  $gp,  $gp, 0,  $gp);
+        dl( $gp, 0,  $gp,  $gp, 0, -$gp);
+        dl( $gp, 0, -$gp, -$gp, 0, -$gp);
+
+        # yz plane
+        dl(0, -$gp, -$gp, 0, -$gp,  $gp);
+        dl(0, -$gp,  $gp, 0,  $gp,  $gp);
+        dl(0,  $gp,  $gp, 0,  $gp, -$gp);
+        dl(0,  $gp, -$gp, 0, -$gp, -$gp);
+
+      }
+
+    }
+
+
+    # parallel lines, base plane
+    # $iy = 0; $jy = 0;
+    # $scale     = 10000000;
+    # $scalestep = 1000000;
+    # $iz = 0; $jz = 502217337.60 * $zf;
+    # 1 earth diameter, in pixels
+    # z positive
+    # for ($ix = -$scale; $ix &lt;= $scale; $ix += $scalestep) {
+    #   $jx = $ix;
+    #   dl($ix, $iy, $iz, $jx, $jy, $jz);
+    # }
+
+    # draw another, grid of objects through pixelspace
+  }
+
+  # scan through points lines in each object
+  # pass points to draw to get each rot,mov'd point
+  # this is moving and rotating the points in each object
+  # relative to the viewer.  so everything's reversed,
+  # move it +10, not me +10
+
+  # from here to end of draw p2 to p0
+  # as a separate fn
+  # pass ref of hash
+  # can I pass ref of hash
+  # as $1 on the unix pipe?  bet not,
+  # it's a hash into the symbol table
+  # of the current instance
+  # 
+  # common image, many nodes
+  #
+
+  # for each object ref
+
+  # move_object($ref, $distance);
+  # rotate_object($ref, $xyzrot);
+  # refs to 3pts, hashes containing values for qw(x y z)
+  # types of hashes, defined by specific text keys
+  # of keys contained, and interpretation of values
+
+  draw_object($ref);
+
+  draw_object($ref2);
+
+  $dis2{"x"} = -300;
+  $dis2{"y"} = -200;
+  $dis2{"z"} = 800;
+
+  # move_object($ref2, %dis2);
+
+  # update toolpage rot and xyz info
+
+  $toolpage-&gt;delete("rotinfo");
+  $toolpage-&gt;createText(70, 20, -text =&gt; "xrot $xrot, yrot $yrot, zrot $zrot", -tags =&gt; "rotinfo" );
+
+  ($xms, $xunit) = getunits(($xpos / $zf));
+  ($yms, $yunit) = getunits(($ypos / $zf));
+  ($zms, $zunit) = getunits(($zpos / $zf));
+
+  $toolpage-&gt;createText(70, 40, -text =&gt; "xpos $xms $xunit", -tags =&gt; "rotinfo" );
+  $toolpage-&gt;createText(70, 60, -text =&gt; "ypos $yms $yunit", -tags =&gt; "rotinfo" );
+  $toolpage-&gt;createText(70, 80, -text =&gt; "zpos $zms $zunit", -tags =&gt; "rotinfo" );
+
+  # left is black, right is white
+  # up is green, down is brown
+  # away is red, toward is blue
+  # rotate lines from a center on toolpage
+  # at rH would look like green up, brown down,
+  # black left, white right, blue dot in center
+
+  # 
+}
+
+
+# load in objects
+
+# my $f1 = "./nff/cubostel.nff";
+# $scf = 1000000;
+# my $f1 = "./teapot.nff";
+# my $f1 = "./shuttle.nff";
+# $scf = 10;
+# my $f1 = "./meguro.nff";
+# my $f1 = "./benfish.nff";  # check nff syntax?
+# my $f1 = "./tardis.nff";
+# my $f1 = "./ringworld.nff";
+# my $f1 = "./ringworld-zspace.nff";
+# z positive
+
+my $f1 = "./trontank.nff";
+$ref = read_nff($f1);
+
+# do array of refs, read in multiple objects
+# call rotate on each one, do another fn that
+# rotates the point info from the ref handle
+# draw object n at xyzrot, each frame
+# callbacks to move individual objects
+
+$f2 = "./ringworld-zspace.nff";
+$ref2 = read_nff($f2);
+
+
+
+redraw();
+
+
+MainLoop(); 
+
+
+
+</pre><html>

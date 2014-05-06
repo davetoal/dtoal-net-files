@@ -1,0 +1,55 @@
+<html><head><title>header.pov</title></head>
+<pre>
+
+
+#declare MaxRecLev = 8;
+#declare AmbientLight = &lt;.2,.2,.2&gt;;
+#declare BGColor = &lt;0,0,0&gt;;
+
+
+global_settings { 
+  assumed_gamma 1.8
+}
+
+
+#include "colors.inc"
+#include "textures.inc"
+
+
+camera {
+  angle 61
+  location &lt;2000, 3500, 2500&gt;
+  look_at &lt;2000, 0, 1500&gt;
+}
+
+
+plane {
+  &lt;0, 1, 0&gt;, -1000
+  texture {
+    // Copper_Metal
+    White_Marble
+    // scale 100000
+    finish {
+      diffuse 0.4
+    }
+  }
+}
+
+
+light_source {
+  &lt;550, 4000, 5000&gt;
+  color White
+}
+
+light_source {
+  &lt;-1800, 1200, 1000&gt;
+  color White
+}
+
+
+
+//----------------------------
+
+
+
+</pre><html>

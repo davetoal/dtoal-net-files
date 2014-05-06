@@ -1,0 +1,68 @@
+<html><head><title>whatprog</title></head>
+<pre>
+#!/bin/ksh
+# dave toal, dec 3, 1998, T&T
+#
+
+[ -z "$1" ] && echo "\n  whatprog &lt;modulename&gt;\n\n  % is a valid wildcard. \n" && exit 0
+
+
+get_all () {
+
+  pw="admin/password"
+
+  line=`echo "select a.so_module, a.so_command_type, a.so_node, b.so_login, \
+                c.so_appl_path, a.so_program, d.so_command_path \
+              from so_job_table a, so_ids b, so_applications c, \
+                so_command_paths d \
+              where a.so_module like '$1' and \
+                 b.so_login_number = a.so_login_number and \
+                 c.so_appl = a.so_library and \
+                 d.so_commd_type = a.so_command_type;" | \
+    sqlplus -s $pw | grep -v "rows selected" | grep -v "\-\-\-" | \
+    grep -v "^$" | grep -v "SO_"`
+
+    echo "$line"
+}
+
+count=1
+prog=""
+
+module=`echo $1 | tr '[a-z]' '[A-Z]'`
+echo $module
+get_all $module | while read line
+do
+
+  nf=`echo $line | nawk '{print NF}'`
+
+  [ $nf -eq 3 ] && {
+
+    count=1
+
+    [ -z "$prog" ] || {
+      echo "$modl runs $comd on $node as $logn in $libr $path running $prog"
+    }
+
+# echo previous values then grab new ones
+
+    modl=`echo $line | nawk '{print $1}'`
+    comd=`echo $line | nawk '{print $2}'`
+    node=`echo $line | nawk '{print $3}'`
+  }
+
+  [ $count -eq 2 ] && logn=$line
+  [ $count -eq 3 ] && libr=$line
+  [ $count -eq 4 ] && prog=$line && path=""
+  [ $count -eq 5 ] && path=$line
+
+  count=`expr $count + 1`
+
+done
+
+echo "$node $comd $logn -- $libr/$path$prog"
+# because the last set of values doesn't get echoed off by the loop
+
+exit 0
+
+
+</pre><html>

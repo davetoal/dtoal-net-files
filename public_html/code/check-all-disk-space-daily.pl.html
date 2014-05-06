@@ -1,0 +1,209 @@
+<html><head><title>check-all-disk-space-daily.pl</title></head>
+<pre>
+
+
+# dave toal
+# daily report of disk space in production
+
+
+use strict;
+
+# use Win32::OLE;
+
+use lib 'r:\Resource\GPD\Std\ver1.2';
+use CdsSmtp;
+
+
+my @mail;
+my $subject = "production disk space report";
+
+my %server = (
+               1 =&gt; [ '\\\server1\resource',               'production /r' ],
+               2 =&gt; [ '\\\server2\CDSJOBS',                'production database' ],
+               3 =&gt; [ '\\\server3\CDS',                    'Edison new print' ],
+               4 =&gt; [ '\\\server4\Resource\Printpath',     'BR print' ],
+               5 =&gt; [ '\\\server5\Workgrp\SHARSV',         'proofs' ],
+               6 =&gt; [ '\\\server6\Workgrp',                'proofs' ],
+               7 =&gt; [ '\\\server7\general',                'proofs' ],
+               8 =&gt; [ '\\\server8\Chidata',                'pre-migration /z' ],
+               9 =&gt; [ '\\\server9\DSS_Inbox\GPD',          'DSS uploads' ],
+              10 =&gt; [ '\\\server10\Group1Data\G1In',       'group1 sort' ],
+              11 =&gt; [ '\\\server11\e$',                    'work3 local disk' ],
+              12 =&gt; [ '\\\server12\e$',                    'work4 local disk' ],
+              13 =&gt; [ '\\\server13\e$',                    'work5 local disk' ],
+              14 =&gt; [ '\\\server14\e$',                    'work7 local disk' ],
+              15 =&gt; [ '\\\server15\e$',                    'fp1 local disk' ],
+              16 =&gt; [ '\\\server16\Archive',               'recent archive dir' ],
+              17 =&gt; [ '\\\server17\nonreplicated\Archive', 'zip archives' ],
+              18 =&gt; [ '\\\server18\Resource\Archives',     'pre-migration /r' ],
+
+             );
+
+
+
+push(@mail, "  Production disks,", "");
+
+for my $k (sort { $a &lt;=&gt; $b } (keys (%server))) {
+  my ($dir, $name) = ($server{$k}-&gt;[0], $server{$k}-&gt;[1]);
+
+  my @result = `dir $dir`;
+  my $line = $result[-1];
+  my $free = (split(/\)/, $line))[-1];
+  chomp($free);
+
+  my $l = length($free);
+  my $s = 28 - $l;
+  my $p = " " x $s;
+
+  $l = length($name);
+  $s = 19 - $l;
+  my $t = " " x $s;
+
+  print "$dir, $free\n";
+
+  push(@mail, "") if ($k == 8 or $k == 11 or $k == 16);
+  push(@mail, "$p  $free, $name, $t$dir");
+
+}
+
+push(@mail, "");
+
+send_mail(\@mail, $subject);
+
+
+
+
+sub timestamp {
+
+  my ($second, $minute, $hour, $dayOfMonth, $month,
+      $yearOffset, $dayOfWeek, $dayOfYear, $daylightSavings) = localtime();
+
+  $second = "0" . $second if ($second &lt; 10);
+  $minute = "0" . $minute if ($minute &lt; 10);
+  $hour   = "0" . $hour   if ($hour &lt; 10);
+
+  $month++;
+  my $year = 2000 + ( $yearOffset - 100 );
+  my $date = "${month}_${dayOfMonth}_${year}";
+
+  my $dt = "$date" . "-" . "$hour:$minute:$second";
+
+  return $dt;
+
+}
+
+
+
+sub send_mail {
+
+  my $body = shift;
+
+  my $subject = shift;
+
+  my $hname = `hostname`;
+  chomp($hname);
+  my $hostname = lc($hname);
+
+  my $scriptname = $0;
+
+  my %send = (
+    from           =&gt;   $hostname,
+    fromdispname   =&gt;   $hostname,
+    to             =&gt; [ "Support\@employer.com" ],
+    recipients     =&gt; [ "#Support" ],
+    subject        =&gt;   "$subject",
+    body           =&gt; [ "", "", @{$body},
+                        "", "this mail is from $scriptname", "" ]
+    );
+
+  my $ret = CdsSmtp::SendMail(\%send);
+
+  print "return value of mail is $ret\n";
+
+}
+
+
+
+sub get_info {
+
+  my ($query, $connection, $field) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    push(@list, $rs-&gt;Fields($field)-&gt;{'value'} );
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub get_info_hash {
+
+  my ($query, $connection, $fields) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    my %row;
+    for my $field (@{$fields}) {
+      $row{$field} = $rs-&gt;Fields($field)-&gt;{'value'};
+    } 
+    push(@list, \%row);
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub get_db_handle {
+
+  my $server = 'server\CDS';
+
+  my $database = 'database';
+  my $user     = 'user';
+  my $passwd   = 'passsword';
+
+  my $dsn = "Provider=SQLOLEDB.1;Password=$passwd;Persist Security Info=False;";
+  $dsn   .= "User ID=$user;Initial Catalog=$database;Data Source=$server;";
+
+  my $connection = Win32::OLE-&gt;new('ADODB.Connection') or die "Cannot get new connection: $!";
+
+  $connection-&gt;Open($dsn);
+
+  return $connection;
+
+}
+
+
+
+sub executeQuery {
+
+  my $query = shift;
+  my $connection = shift;
+
+  my $record_set = Win32::OLE-&gt;new('ADODB.Recordset');
+
+  $record_set = $connection-&gt;Execute($query);
+
+  if(! $record_set ) {
+    print     "error: " . Win32::OLE-&gt;LastError();
+    print LOG "error: " . Win32::OLE-&gt;LastError();
+  }
+
+  return $record_set;
+
+}
+
+
+</pre><html>

@@ -1,0 +1,94 @@
+<html>
+
+<head>
+
+  <script src="http://code.jquery.com/jquery-1.9.1.js"></script>
+
+  <script>
+
+    var window_width  = $(window).width();
+    var window_height = $(window).height();
+
+    var global_div_id = 0;
+
+    var global_opacity_stack_run_counter = 0;
+
+
+    function init_page() {
+
+      $('body').append('<div id="opacity_list" style="background-color: #e0e0e0; height: 40px; width: 30px; position: absolute;"></div>');
+
+      $('#opacity_list').offset({ top: 305, left: 760 });
+      $('#opacity_list').css('padding', 10);
+
+      var stack_top = 200, stack_left = 500, stack_height = 50, stack_steps = 20;
+
+      opacity_stack(stack_top, stack_left, stack_height, stack_steps);
+
+      // opacity_stack(900, stack_left, 50);
+
+      $('body').append('<div id="add_stack" onclick="opacity_stack(500, 500, 50, 50)" style="background-color: #a0a0a0; width: 200px; height: 40px; border: 10px black; position: absolute;"><center>click to add stack</center></div>');
+
+      $('#add_stack').offset({ top: 300, left: 460 });
+      $('#add_stack').css('padding', 10);
+      $('#add_stack').css('border-left',   '5px solid #909090');
+      $('#add_stack').css('border-top',    '5px solid #e0e0e0');
+      $('#add_stack').css('border-right',  '5px solid #404040');
+      $('#add_stack').css('border-bottom', '5px solid #000000');
+
+      $('#vertical_black_bar').height(window_height);
+
+    }
+
+
+
+    function opacity_stack(top, left, height, steps) {
+
+      $('#opacity_list').html('');
+      $('#opacity_list').append(' ' + global_opacity_stack_run_counter);
+
+      var step_height = height / steps;
+
+      var opacity_step = 1 / steps;
+
+      for (var i = 0; i < steps; i++) {
+
+        var div_opacity = opacity_step * i;
+
+        var total_div_opacity = div_opacity * global_opacity_stack_run_counter;
+
+        // $('#opacity_list').append(' ' + total_div_opacity);
+
+        var div_id = 'div' + global_div_id;
+        global_div_id++;
+
+        $('body').append('<div id="' + div_id + '" style="background-color: #ffffff; width: 10%; position: absolute;"><p></div>');
+
+        var div_top = top - (i * step_height);
+
+        $('#' + div_id).offset({ top: div_top, left: left });
+        $('#' + div_id).height(step_height);
+        $('#' + div_id).css({ opacity: div_opacity });
+        
+      }
+
+      global_opacity_stack_run_counter++;
+
+    }
+
+
+    $(document).ready(function() { init_page(); } );
+
+
+  </script>
+
+</head>
+
+<body>
+
+  <div id="vertical_black_bar" style="background-color: #000000; width: 20px; height 1000px; top: 0; left: 550; position: absolute;"><p></div> 
+
+</body>
+
+</html>
+

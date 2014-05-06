@@ -1,0 +1,88 @@
+<html>
+<head><title>substring frequency counts</title>
+
+<script type="application/javascript">
+
+  function draw() { 
+
+    var canvas = document.getElementById("graphcanvas");
+
+    if (canvas.getContext) {  
+
+      var ctx = canvas.getContext("2d");  
+      
+      ctx.fillStyle = "rgb(200,0,0)";  
+      ctx.fillRect (10, 10, 55, 50);
+
+      ctx.fillStyle = "rgba(0, 0, 200, 0.5)";
+      ctx.fillRect (30, 30, 155,250);
+
+      ctx.beginPath();
+      ctx.arc(75,75,50,0,Math.PI*2,true); // Outer circle
+      ctx.moveTo(110,75);
+      ctx.arc(75,75,35,0,Math.PI,false);   // Mouth (clockwise)
+      ctx.moveTo(65,65);  
+      ctx.arc(60,65,5,0,Math.PI*2,true);  // Left eye  
+      ctx.moveTo(95,65);  
+      ctx.arc(90,65,5,0,Math.PI*2,true);  // Right eye  
+      ctx.stroke();  
+
+    }
+
+  }  
+
+
+  function connect() {
+
+    var canvas = document.getElementById("graphcanvas");
+    if (canvas.getContext) {
+      var ctx = canvas.getContext("2d");
+    }
+
+    var displayscreen = document.getElementById("display");
+    displayscreen.innerHTML = "\n  connecting to database\n\n";
+
+    ctx.fillStyle = "rgb(200,0,150";
+    ctx.fillRect(100, 10, 50, 5);
+
+    var link = mysql_connect("dtoal.ipowermysql.com", "davegeno", "davegeno"); 
+
+    ctx.fillRect(100, 20, 50, 5);
+
+    mysql_select_db("geno", link); 
+
+    ctx.fillRect(100, 30, 50, 5);
+
+    displayscreen.innerHTML = "\n  connected to database\n\n";
+
+    var query = "select count(seg) from segposition;";
+    var mysql_result = mysql_query(query);
+    var row = mysql_fetch_row(mysql_result);
+
+    print(row[0]);
+
+  }
+
+
+</script>
+</head>
+
+<body>
+<pre>
+
+<div id="display" style="background-color:#aaaaaa;width:300px">
+  database connection is not open yet
+
+</div>
+
+<div id="graph" style="border-style:solid;border-width:2px;width:804px"><canvas id="graphcanvas" width="800" height="400"></canvas></div>
+
+</pre>
+
+<input type="button" value="draw" onclick="draw()">   <input type="button" value="connect to db" onclick="connect()">
+
+
+</body>
+</html>
+
+

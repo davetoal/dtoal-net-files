@@ -1,0 +1,250 @@
+<html><head><title>check-pubsys-and-restart.ksh</title></head>
+<pre>
+#!/bin/ksh
+# dave toal 361 2k02
+# watch all procs
+# mail and restart if any fail
+#
+
+
+procname="pubsys"
+proclist="./osagent ./acadmagent ./billbatchtx"
+scriptname="/pubsys.server"
+
+people="unix@employer.com, saegis@employer.com"
+
+
+box=`hostname`
+
+me=`basename $0`
+results=/tmp/$me-results-file
+goodflag=/tmp/$me-good-flag-file
+badflag=/tmp/$me-bad-flag-file
+mailfile=/tmp/$me-mail-file
+restartmail=/tmp/$me-mail-file-for-restart
+counter=/tmp/$me-bad-timer
+echo 0 &gt; $counter
+
+
+sleeptime=300
+patience=12
+# when a bad flag file exists
+# meaning that mail about down state has already been sent, 
+# ignore the down state after $sleeptime * $patience seconds
+#   and retry the start_server
+
+
+rm -f $badflag
+rm -f $goodflag
+
+
+
+# ------------------------------------------------------------------
+
+show_my_procs() {
+
+  for p in $proclist
+  do ps -ef | grep -v grep | grep $p
+  done
+
+}
+
+
+
+# ------------------------------------------------------------------
+
+check_server_procs() {
+
+  rm $mailfile
+
+
+  ps -ef &gt; $results
+
+  for p in $proclist
+  do if grep $p $results
+     then echo "$p is running"
+     else echo "	$p is not running" &gt;&gt; $mailfile
+     fi
+  done
+
+  if [ -s $mailfile ]
+  then return 1
+  else return 0
+  fi
+
+}
+
+
+
+# ------------------------------------------------------------------
+
+send_good_mail() {
+
+  mailx -s "$box $procname is running" $people &lt;&lt; msg1
+
+`show_my_procs`
+
+This mail is from $0
+
+msg1
+
+}
+
+
+
+# ------------------------------------------------------------------
+
+send_bad_mail() {
+ 
+  mailx -s "$box $procname -- problem" $people &lt;&lt; msg2
+
+
+
+`cat $mailfile`
+
+
+
+	These processes should be running:
+ 
+	$proclist
+
+
+
+	Now restarting $procname on $box...
+
+
+This mail is from $0
+
+msg2
+
+}    
+
+
+
+# ------------------------------------------------------------------
+
+restart_the_server() {
+
+  # $scriptname stop
+
+  sleep 2
+
+  echo "
+	After stopping $procname, these were left running:
+  " | tee $restartmail
+
+  show_my_procs | tee -a $restartmail
+
+
+  for thing in $proclist
+  do
+
+    for pid in `ps -ef | grep -v grep | grep $thing | awk '{print $2}'`
+    do
+      echo "killing $thing, pid $pid"
+      # kill -9 $pid
+    done 
+
+  done | tee -a $restartmail
+
+
+  echo "
+	After killing any stray processes:
+  " | tee -a  $restartmail
+
+  show_my_procs | tee -a $restartmail
+
+
+  # $scriptname start
+
+  sleep 2
+
+
+  echo "
+        After restarting $procname, this is running:
+  " | tee -a $restartmail
+
+  show_my_procs | tee -a $restartmail
+ 
+  mailx -s "$box $procname was restarted" $people &lt;&lt; msg3
+
+`cat $restartmail`
+
+
+This mail is from $0
+
+msg3
+
+}
+
+
+
+
+# ------------------------------------------------------------------
+
+time_to_poke_it_again() {
+
+  count=`cat $counter`
+  if [ $count -lt $patience ]
+  then
+    echo "not time yet"
+    count=`expr $count + 1`
+    echo $count &gt; $counter
+    return 1
+  else
+    echo "okay -- time is up"
+    echo 0 &gt; $counter
+    return 0
+  fi
+
+}
+
+
+
+# ------------------------------------------------------------------
+# main loop
+
+echo "starting at `date`"
+
+while sleep $sleeptime
+do
+
+  echo "in loop"
+
+  if check_server_procs $box
+  then 
+  
+    if [ -f $goodflag ]
+    then 
+      echo "all is well"
+      rm $badflag
+    else
+      echo "sending good notification"
+      send_good_mail
+      touch $goodflag
+    fi
+
+  else 
+
+    if [ -f $badflag ]
+    then
+      echo "bad mail already sent"
+      if time_to_poke_it_again
+      then rm $badflag
+      fi
+    else
+      echo "sending bad notification"
+      send_bad_mail
+      touch $badflag
+      rm $goodflag
+      restart_the_server
+    fi
+
+  fi
+
+done
+
+exit 0
+
+
+</pre><html>

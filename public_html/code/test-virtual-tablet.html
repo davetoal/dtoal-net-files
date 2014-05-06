@@ -1,0 +1,63 @@
+<html>
+
+<head>
+
+  <script src="http://code.jquery.com/jquery-1.9.1.js"></script>
+
+  <script>
+
+    var window_width  = $(window).width();
+    var window_height = $(window).height();
+
+    // console.log('window ' + window_width + ', ' + window_height);
+
+    $('#background').width(window_width);
+    $('#background').height(window_height);
+
+    $('#background').css('background-color', '#353535');
+
+
+    $('#iframe_div').css('position', 'absolute');
+
+    var iframe_width = 833;
+    var iframe_height = 588;
+
+    var iframe_top  = ( window_height - iframe_height ) / 2;
+    var iframe_left = ( window_width - iframe_width ) / 2;
+
+    // console.log('iframe ' + iframe_top + ', ' + iframe_left);
+
+    // $('#iframe_div').css('top', iframe_top);
+    // $('#iframe_div').css('left', iframe_left);
+
+    $('#iframe_div').css('top', 300);
+    $('#iframe_div').css('left', 250);
+
+  </script>
+
+</head>
+
+<body>
+ 
+  <div id="background" style="background-color: #000000; width: 100%; height: 100%;">&nbsp;
+
+    <div id="iframe_div">
+
+      <br>
+      <center><div style="font-style: italic; font-family: Helvetica; color: #606060">iFrame</div></center>
+      <br>
+      <br>
+      <br>
+
+      <center>
+        <iframe id="iframe" src="http://tabeeb-db.myimedia.com/test-pages/case_v03/" width="833" height="588" frameborder="1"></iframe>
+      </center>
+
+    </div>
+
+  </div>
+
+</body>
+
+</html>
+

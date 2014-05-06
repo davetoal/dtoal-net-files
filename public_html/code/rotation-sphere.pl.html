@@ -1,0 +1,273 @@
+<html><head><title>rotation-sphere.pl</title></head>
+<pre>
+
+
+# dave toal
+
+
+use strict;
+
+
+use lib "../lib";
+
+require "matrix.pl";
+
+require "rotatepoint.pl";
+
+
+
+my $outputfile = "xmas-ornament.pov";
+
+`cat header.pov &gt; $outputfile`;
+
+open(O, "&gt;&gt; $outputfile");
+
+
+#                     f1
+# r1                  --
+#                    /  \
+#                   /    \
+#                  /  f2  \
+# r2              ----------
+#                 |        |
+#                 |   f2   |
+# r3              ----------
+#                 |        |
+#                  |      |
+#                  |      |
+#                   |    |
+#                   |    |
+#                    |  |  
+#                    |  |  
+# r4                  ||
+#
+#                     f1, 3?
+#
+
+my %x;
+
+
+my $r1 = 350;
+my $r2 = $r1 - 4;
+my $r3 = $r1 - 6;
+my $r4 = $r1 - 230;
+
+my $f1 = 0.5;
+my $f2 = 2;
+
+my $pt = [ 
+           [ $r1,  $f1,  $f1 ] ,
+           [ $r1,  $f1, -$f1 ] ,
+           [ $r1, -$f1, -$f1 ] ,
+           [ $r1, -$f1,  $f1 ] ,
+
+           [ $r2,  $f2,  $f2 ] ,
+           [ $r2,  $f2, -$f2 ] ,
+           [ $r2, -$f2, -$f2 ] ,
+           [ $r2, -$f2,  $f2 ] ,
+
+           [ $r3,  $f2,  $f2 ] ,
+           [ $r3,  $f2, -$f2 ] ,
+           [ $r3, -$f2, -$f2 ] ,
+           [ $r3, -$f2,  $f2 ] ,
+
+           [ $r4,  $f1,  $f1 ] ,
+           [ $r4,  $f1, -$f1 ] ,
+           [ $r4, -$f1, -$f1 ] ,
+           [ $r4, -$f1,  $f1 ]
+         ];
+
+
+my $numpts = 16;
+
+my $latitude_step  = 10;
+
+my $longitude_step = 20;
+
+
+
+# j is y rotation, i is z rotation, do z first,
+
+
+for (my $j = 0; $j &lt; 360; $j += $longitude_step) {
+
+  for (my $i = -90 + $latitude_step * 2; $i &lt; 90 - $latitude_step; $i += $latitude_step) {
+
+    my @sq;
+
+    for (my $s = 0; $s &lt; $numpts; $s++) {
+
+      my ($rx, $ry, $rz) = rotateglobalpt($pt-&gt;[$s]-&gt;[0], $pt-&gt;[$s]-&gt;[1], $pt-&gt;[$s]-&gt;[2], 0, 0, $i);
+
+      my ($px, $py, $pz) = rotateglobalpt($rx, $ry, $rz, 0, $j, 0);
+
+      my $a = [ $px, $py, $pz ];
+
+      push @sq, $a;
+
+    }
+
+
+    $x{"$i $j"} = \@sq;
+
+    # then step through again to put the bars between the points, on the r2 and r3 level
+
+
+    # triangles between the rotated points of the squares, e.g. 0-1-2 and 0-2-3, going clockwise
+
+    # front face at r1, 0-1-2 and 0-2-3
+    # back face at r4, 12-15-14 and 12-14-13
+
+    # top face of front facet, 0-4-5 and 0-5-1
+    # top face of back facet, 8-12-13 and 8-13-9
+
+    # right side of front facet, 1-5-6 and 1-6-2
+    # right side of back facet, 9-13-14 and 9-14-10
+
+    # bottom face of front facet, 2-6-7 and 2-7-3
+    # bottom face of back facet, 10-14-15 and 10-15-11
+
+    # left face of front facet, 3-7-4 and 3-4-0
+    # left face of back facet, 11-15-12 and 11-12-8
+
+
+    my @vertex_list = (
+                        [ 0, 1, 2 ] ,     [ 0, 2, 3 ] ,
+                        [ 12, 15, 14 ] ,  [ 12, 14, 13 ] ,
+
+                        [ 0, 4, 5 ] ,     [ 0, 5, 1 ] ,
+                        [ 8, 12, 13 ] ,   [ 8, 13, 9 ] ,
+
+                        [ 1, 5, 6 ] ,     [ 1, 6, 2 ] ,
+                        [ 9, 13, 14 ] ,   [ 9, 14, 10 ] ,
+
+                        [ 2, 6, 7 ] ,     [ 2, 7, 3 ] ,
+                        [ 10, 14, 15 ] ,  [ 10, 15, 11 ] ,
+
+                        [ 3, 7, 4 ] ,     [ 3, 4, 0 ] ,
+                        [ 11, 15, 12 ] ,  [ 11, 12, 8 ]
+
+                      );
+
+
+    for my $v (@vertex_list) {
+
+      my $a = $v-&gt;[0]; 
+      my $b = $v-&gt;[1]; 
+      my $c = $v-&gt;[2];
+
+      print O "triangle { &lt;$sq[$a]-&gt;[0], $sq[$a]-&gt;[1], $sq[$a]-&gt;[2]&gt;, " .
+                         "&lt;$sq[$b]-&gt;[0], $sq[$b]-&gt;[1], $sq[$b]-&gt;[2]&gt;, " .
+                         "&lt;$sq[$c]-&gt;[0], $sq[$c]-&gt;[1], $sq[$c]-&gt;[2]&gt;  " .
+                         "texture { Silver_Metal } }\n";
+
+    }
+
+  }
+
+}
+
+
+
+# step through the positions again, drawing bars at radius f2 to previous latitude and longitude
+
+# $x{"$i $j"} = \@sq;
+
+
+for (my $j = 0; $j &lt; 360; $j += $longitude_step) {
+
+  for (my $i = -90 + $latitude_step * 2; $i &lt; 90 - $latitude_step; $i += $latitude_step) {
+
+    my $curr = $x{"$i $j"};
+
+    my $pj;
+
+    if ($j &gt; 0) { $pj = $j  - $longitude_step; }
+           else { $pj = 360 - $longitude_step; }
+
+    my $plon = $x{"$i $pj"};
+
+
+    # horizontal bars back to previous longitude
+
+    my @vertex_list = (
+                        [ 5, 4, 8   ,  5, 8, 9 ] ,
+                        [ 6, 7, 4   ,  6, 4, 5 ] ,
+                        [ 10, 11, 7 ,  10, 7, 6 ] ,
+                        [ 9, 8, 11  ,  9, 11, 10 ]
+                      );
+
+    for my $v (@vertex_list) {
+
+      my $a = $v-&gt;[0];
+      my $b = $v-&gt;[1];
+      my $c = $v-&gt;[2];
+      my $d = $v-&gt;[3];
+      my $e = $v-&gt;[4];
+      my $f = $v-&gt;[5];
+
+      print O "triangle { &lt;$curr-&gt;[$a]-&gt;[0], $curr-&gt;[$a]-&gt;[1], $curr-&gt;[$a]-&gt;[2]&gt;, " .
+                         "&lt;$plon-&gt;[$b]-&gt;[0], $plon-&gt;[$b]-&gt;[1], $plon-&gt;[$b]-&gt;[2]&gt;, " .
+                         "&lt;$plon-&gt;[$c]-&gt;[0], $plon-&gt;[$c]-&gt;[1], $plon-&gt;[$c]-&gt;[2]&gt;  " .
+                         "texture { Silver_Metal } }\n";
+
+      print O "triangle { &lt;$curr-&gt;[$d]-&gt;[0], $curr-&gt;[$d]-&gt;[1], $curr-&gt;[$d]-&gt;[2]&gt;, " .
+                         "&lt;$plon-&gt;[$e]-&gt;[0], $plon-&gt;[$e]-&gt;[1], $plon-&gt;[$e]-&gt;[2]&gt;, " .
+                         "&lt;$curr-&gt;[$f]-&gt;[0], $curr-&gt;[$f]-&gt;[1], $curr-&gt;[$f]-&gt;[2]&gt;  " .
+                         "texture { Silver_Metal } }\n";
+
+    }
+
+
+
+    # and vertical bars back to previous latitude
+
+    if ($i &gt; -90 + $latitude_step * 2) {
+
+      my $pi = $i - $latitude_step;
+      my $plat = $x{"$pi $j"};
+
+      my @vertex_list = (
+                          [ 5, 6, 7   ,  5, 7, 4 ] ,
+                          [ 9, 10, 6  ,  9, 6, 5 ] ,
+                          [ 8, 11, 10 ,  8, 10, 9 ] ,
+                          [ 4, 7, 11  ,  4, 11, 8 ]
+                        );
+
+      for my $v (@vertex_list) {
+
+        my $a = $v-&gt;[0];
+        my $b = $v-&gt;[1];
+        my $c = $v-&gt;[2];
+        my $d = $v-&gt;[3];
+        my $e = $v-&gt;[4];
+        my $f = $v-&gt;[5];
+
+        print O "triangle { &lt;$curr-&gt;[$a]-&gt;[0], $curr-&gt;[$a]-&gt;[1], $curr-&gt;[$a]-&gt;[2]&gt;, " .
+                           "&lt;$plat-&gt;[$b]-&gt;[0], $plat-&gt;[$b]-&gt;[1], $plat-&gt;[$b]-&gt;[2]&gt;, " .
+                           "&lt;$plat-&gt;[$c]-&gt;[0], $plat-&gt;[$c]-&gt;[1], $plat-&gt;[$c]-&gt;[2]&gt;  " .
+                           "texture { Silver_Metal } }\n";
+
+        print O "triangle { &lt;$curr-&gt;[$d]-&gt;[0], $curr-&gt;[$d]-&gt;[1], $curr-&gt;[$d]-&gt;[2]&gt;, " .
+                           "&lt;$plat-&gt;[$e]-&gt;[0], $plat-&gt;[$e]-&gt;[1], $plat-&gt;[$e]-&gt;[2]&gt;, " .
+                           "&lt;$curr-&gt;[$f]-&gt;[0], $curr-&gt;[$f]-&gt;[1], $curr-&gt;[$f]-&gt;[2]&gt;  " .
+                           "texture { Silver_Metal } }\n";
+
+      }
+
+    }
+
+  }
+
+}
+
+close(O);
+
+
+`./runpov $outputfile`;
+
+# add surface normals scaled to unit vectors
+
+
+
+</pre><html>

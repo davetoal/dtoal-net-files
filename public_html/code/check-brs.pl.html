@@ -1,0 +1,119 @@
+<html><head><title>check-brs.pl</title></head>
+<pre>
+#!/usr/local/bin/perl
+# dave toal 007 2k01
+# check records in BRS data file
+
+use strict;
+
+my @buffer = ();
+my $line = "";
+my $count_1 = 0;
+my $count_2 = 0;
+my $count_3 = 0;
+my $count_4 = 0;
+my $count_5 = 0;
+
+my $good_count = 0;
+my $bad_count  = 0;
+
+@buffer = ();
+
+my $bad_data = 1;
+
+# line ~ boundary
+#   first check to see if there is already
+#     content in the buffer
+#     and if any flags are set
+#     if so, print buffer to badfile
+#       good file otherwise
+#   there is always content in the buffer
+#     so 1st iter set flags bad
+#     flush null to bad not good
+#
+#   begin new buffer with it as first line
+#   if mangled then set bad boundary flag
+#
+# line ^~ line tags
+#   increment by type
+#   if &gt; 1 then set excessive records flag
+# 
+
+
+my $brsfile = "extr/brs.incremental.txt.international.5";
+
+open (BRS, $brsfile);
+open (GOOD_OUT, "&gt;brs-results-good");
+open (BAD_OUT,  "&gt;brs-results-bad");
+
+
+while (&lt;BRS&gt;) {
+
+  if ( /OUNDARY\s\*\*\*$/ ) {
+
+    $bad_data = 1 if ( ($count_1 &lt; 1) or
+                       ($count_2 &lt; 1) or
+                       ($count_3 &lt; 1) or
+                       ($count_4 &lt; 1) or
+                       ($count_5 &lt; 1) );
+
+    if ($bad_data) {
+      print BAD_OUT @buffer;
+    } else {
+      print GOOD_OUT @buffer;
+    }
+
+    # reset buffer
+
+    $count_1 = 0;
+    $count_2 = 0;
+    $count_3 = 0;
+    $count_4 = 0;
+    $count_5 = 0;
+
+    # some of the separators are broken
+
+    if ( /\*\*\*\sBRS\sDOCUMENT\sBOUNDARY\s\*\*\*/ ) {
+
+      $bad_data = 0;
+      @buffer = ($_);
+
+      $good_count++;
+
+    } else {
+
+      # linefeed to separate bad data
+      @buffer = "\n";
+      push (@buffer, $_);
+      $bad_data = 1;
+
+      $bad_count++;
+
+    }
+
+  } else {
+
+    push(@buffer, $_);
+
+    /^.009/ and $count_1++;
+    /^.006/ and $count_2++;
+    /^.010/ and $count_3++;
+    /^.013/ and $count_4++;
+    /^.014/ and $count_5++;
+
+    $bad_data = 1 if ( ($count_1 &gt; 1) ||
+                       ($count_2 &gt; 1) ||
+                       ($count_3 &gt; 1) ||
+                       ($count_4 &gt; 1) ||
+                       ($count_5 &gt; 1) );
+  }
+}
+
+print BAD_OUT "checked $good_count good and $bad_count bad\n";
+close (GOOD_OUT);
+close (BAD_OUT);
+close (BRS);
+
+
+
+</pre><html>

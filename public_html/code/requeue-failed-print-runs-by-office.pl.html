@@ -1,0 +1,214 @@
+<html><head><title>requeue-failed-print-runs-by-office.pl</title></head>
+<pre>
+
+
+# dave toal
+
+# re-queue failed runs by office of registration
+
+
+use strict;
+
+my $LJT = "perl R:\\Archives\\Contract_Runs\\list-job-tracking.pl";
+
+
+# my $infile = 'pm-list-of-failed-print-runs.txt';
+my $infile = 'requeue-list-of-failed-print-runs.txt';
+open(IN, "&lt; $infile");
+
+print "\n  reading from $infile\n\n";
+
+
+my $ars = 'r:\Archives\Contract_Runs';
+
+
+while (my $line = &lt;IN&gt;) {
+
+  next unless ($line =~ /,/);
+
+  my @b = split(/\s+/, $line);
+
+  my $job = $b[0];
+  my $run = $b[1];
+  my $num = $b[10];
+
+  $job =~ s/,//;
+  $run =~ s/,//;
+
+  # print "$line";
+  print "  $job $run, ";
+
+  my $arsdir = $ars . "\\$job\\Run_$run";
+  my $reldir = $arsdir . "\\Releasefiles";
+  my $prndir = $arsdir . "\\Print_Files";
+
+
+  chdir $reldir;
+
+  system("ls -l");
+
+  my $office;
+
+  unless ($job =~ /001cs0075/i) {
+
+    unless ( -f "*COMPANY*" ) { `unzip -o -j *zip *COMPANY*`; }
+
+    my @c = glob("*COMPANY*");
+    my $cfg = $c[0];
+    my $off = `grep -i office: *COMPANY*`;
+    $office = (split(/:/, $off))[1];
+    chomp($office);
+
+  } 
+
+  my $region = 0;
+  my $print;
+
+  if ($office =~ /Canton|Citibank/) { $region = 5; $print = "Edison"; }
+
+  if ($office =~ /Chicago|Los Angeles|New Jersey|Cleveland|Denver/) { $region = 1; $print = "Burr Ridge"; }
+
+  if ($job =~ /001cs0075/i) { $region = 3; $print = "quickcerts"; $office = "quickcerts"; }
+
+  print "  office is $office, $num queued, region $region, $print\n";
+
+
+  chdir $prndir;
+
+  my @gpds = glob("*gpd");
+
+  for my $g (@gpds) {
+
+    if ($g =~ /\.b\./i or $g =~ /\.bda/i or $g =~ /\.em[l|t|_]/i or $g =~ /\.dss/i or $g =~ /\.a4/i) { 
+
+      print "  $g, move to noprint\n"; 
+      unless ( -d "noprint" ) { system("mkdir noprint"); }
+
+      my $fbase = $g;
+      $fbase =~ s/gpd$//i;
+      $fbase .= "*";
+      my @moves = glob($fbase);
+
+      for my $mfile (@moves) { 
+
+        if ($job =~ /001cs0005/i and ( $g =~ /\.b\./i or $g =~ /\.bda/i )) {
+          print "not moving $mfile, 05\n";
+        } else {
+          print "    mv $mfile noprint\n"; 
+          system("mv $mfile noprint"); 
+        }
+      }
+
+    } else { 
+      print "  $g\n"; 
+    }
+
+  }
+
+  if ($region == 1) { `cp ../../../q*-1.pl .`; }
+  if ($region == 3) { `cp ../../../q*-3.pl .`; }
+  if ($region == 5) { `cp ../../../q*-5.pl .`; }
+
+
+  my @gpds = glob("*gpd");
+
+  if (@gpds) {
+
+    my @q = glob("queue_me*");
+
+    if (@q) {    
+
+      my @l = `$LJT $job $run`;
+
+      my @lq = grep(/^$run/, @l);
+
+      if (@lq) {
+        for (@lq) { print "$_" }
+      } else {
+         print "  running $q[0]\n";
+         system("perl $q[0]");
+         # print "  queue-me step is commented out\n";
+      }
+
+    } else {
+      print "unknown region, no queue-me found\n";
+    }
+
+  } else {
+    print "no gpds remaining in the dir after moves, not running queue-me\n";
+  }
+
+  print "\n";
+
+}
+
+close(IN);
+
+
+__DATA__
+
+
+p=26011
+
+while [ $p -lt 26024 ]
+do 
+
+  cd Run_$p/Releasefiles
+  pwd
+
+  # unzip *zip *COMPANY*
+
+  off=`grep -i office: *COMPANY*`
+
+  office=`echo $off | awk -F":" '{print $2}'`
+
+  echo "$off"
+
+  region=0
+
+  if [ $office == "Canton" ]
+  then
+    echo "Edison"
+    region=5
+  fi
+
+  if [ $office == "Chicago" ]
+  then 
+    echo "Burr Ridge"
+    region=1
+  fi
+
+  if [ $region -gt 0 ]
+  then
+    cd ../Print_Files
+    get="cp ../../../q*-$region.pl ."
+    echo "$get"
+    eval "$get"
+  fi
+
+  cd ../..
+  echo
+  p=`expr $p + 1`
+done
+
+
+
+  001CS0006 28193, total 618
+-rw-rw-rw-   1 user     group        2691 Mar 12 02:43 BANR_.BANR.014305_COMPANYDETAIL.CFG
+-rw-rw-rw-   1 user     group      629687 Mar 12 12:47 BANR_UC_ST_0310_11155252.tpe.zip
+drwxrwxrwx   1 user     group           0 Mar 12 14:47 Config
+  office is Chicago, ZERO queued, region 1, Burr Ridge
+no gpds remaining in the dir after moves, not running queue-me
+
+
+  001CS0006 28203, total 480
+-rw-rw-rw-   1 user     group        2942 Mar 12 02:23 BPFH_.BPFH.012332_COMPANYDETAIL.CFG
+-rw-rw-rw-   1 user     group      488130 Mar 12 13:17 BPFH_UC_ST_AUTO_11113501.tpe.zip
+drwxrwxrwx   1 user     group           0 Mar 12 14:47 Config
+  office is Canton, ZERO queued, region 5, Edison
+no gpds remaining in the dir after moves, not running queue-me
+
+
+
+
+</pre><html>

@@ -1,0 +1,206 @@
+<html><head><title>list-job-log.pl</title></head>
+<pre>
+
+
+# dave toal
+# echo "select job_name from job_tracking where job_number like '001cs0003' and run_number = 2447" | sqlplus
+# same as check-file, if 1 arg then it's a filename, if 2 args then its job and run
+#
+
+
+use strict;
+
+use Win32::OLE;
+
+# use lib 'r:\Resource\GPD\Std\ver1.2';
+# use CdsSmtp;
+
+
+my ($job, $run, $file);
+
+my ($query, @fields, $f);
+
+usage() unless ($ARGV[0]);
+
+if ($ARGV[1]) {
+  $job = $ARGV[0];
+  $run = $ARGV[1];
+  # print "\n  select from job log for $job $run\n\n";
+} else { 
+  $file = $ARGV[0];
+  # print "\n  select from job log for $file%\n\n";
+}
+
+print "\n";
+
+
+my @fields = qw(job_name run_number start_date_time end_date_time machine short_file_name return_message);
+my $f = join(", ", @fields);
+
+if ($ARGV[1]) {
+  $query = "select $f from job_log where job_name like '$job' and run_number = $run";
+} else {
+  $query = "select $f from job_log where short_file_name like '$file%'";
+}
+$query .= " order by start_date_time desc";
+
+
+my $dbh = get_db_handle();
+my $l = get_info_list($query, $dbh, \@fields);
+$dbh-&gt;Close();
+
+for my $f (@fields) { print "$f\t"; }
+print "\n";
+
+for my $r (@$l) {
+  for my $k (@fields) {
+    # next if ($k =~ /date_time/i);
+    print "$r-&gt;{$k}\t";
+  }
+  print "\n";
+}
+
+
+
+sub usage {
+  print "\n\n  $0 job run,\n  e.g. $0 001CS0105 645\n\n";
+  print "  OR\n\n  $0 file,\n  e.g. $0 WMT_UC_ST_SPMI_22211237\n\n";
+  exit;
+}
+
+
+
+sub timestamp {
+
+  my ($second, $minute, $hour, $dayOfMonth, $month,
+      $yearOffset, $dayOfWeek, $dayOfYear, $daylightSavings) = localtime();
+
+  $second = "0" . $second if ($second &lt; 10);
+  $minute = "0" . $minute if ($minute &lt; 10);
+  $hour   = "0" . $hour   if ($hour &lt; 10);
+
+  $month++;
+  my $year = 2000 + ( $yearOffset - 100 );
+  my $date = "${month}_${dayOfMonth}_${year}";
+
+  my $dt = "$date" . "-" . "$hour:$minute:$second";
+
+  return $dt;
+
+}
+
+
+
+sub send_mail {
+
+  my $body = shift;
+
+  my $subject = shift;
+
+  my $hname = `hostname`;
+  chomp($hname);
+  my $hostname = lc($hname);
+
+  my $scriptname = $0;
+
+  my %send = (
+    from           =&gt;   $hostname,
+    fromdispname   =&gt;   $hostname,
+    to             =&gt; [ "Support\@employer.com", "EmergencySupport\@employer.com" ],
+    recipients     =&gt; [ "#Support", "#Emergency Support" ],
+    subject        =&gt;   "$subject",
+    body           =&gt; [ "", "", @{$body},
+                        "", "this mail is from $scriptname", "" ]
+    );
+
+  my $ret = CdsSmtp::SendMail(\%send);
+
+  print "return value of mail is $ret\n";
+
+}
+
+
+
+sub get_info {
+
+  my ($query, $connection, $field) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    push(@list, $rs-&gt;Fields($field)-&gt;{'value'} );
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub get_info_list {
+
+  my ($query, $connection, $fields) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    my %row;
+    for my $field (@{$fields}) {
+      $row{$field} = $rs-&gt;Fields($field)-&gt;{'value'};
+    } 
+    push(@list, \%row);
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub get_db_handle {
+
+  my $server = 'server\CDS';
+
+  my $database = 'Database';
+  my $user     = 'user';
+  my $passwd   = 'password';
+
+  my $dsn = "Provider=SQLOLEDB.1;Password=$passwd;Persist Security Info=False;";
+  $dsn   .= "User ID=$user;Initial Catalog=$database;Data Source=$server;";
+
+  my $connection = Win32::OLE-&gt;new('ADODB.Connection') or die "Cannot get new connection: $!";
+
+  $connection-&gt;Open($dsn);
+
+  return $connection;
+
+}
+
+
+
+sub executeQuery {
+
+  my $query = shift;
+  my $connection = shift;
+
+  my $record_set = Win32::OLE-&gt;new('ADODB.Recordset');
+
+  $record_set = $connection-&gt;Execute($query);
+
+  if(! $record_set ) {
+    print     "error: " . Win32::OLE-&gt;LastError();
+    print LOG "error: " . Win32::OLE-&gt;LastError();
+  }
+
+  return $record_set;
+
+}
+
+
+</pre><html>

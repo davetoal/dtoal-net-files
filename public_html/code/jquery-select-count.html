@@ -1,0 +1,51 @@
+<html>
+<head>
+
+<title>call select-count php from jquery</title>
+
+<script src="jquery.js"></script>
+
+
+<script>
+
+  function runquery() {
+
+    var string = "australia";
+
+    $("#resultpane").html("starting in runquery");
+
+    $.get("select-count-from-segcount.php", { query: "australia" }, function(data){ showresult(data); } );
+
+  };
+
+
+  function showresult(data) {
+
+    $("#resultpane").html("in showresult");
+
+    var string = "data is " + data + ".";
+
+    $("#datapane").html(string);
+
+  };
+
+
+</script>
+
+</head>
+
+
+<body>
+
+  <input type="button" value="query australia" onclick="runquery();">
+
+  <div id="resultpane">no query data yet</div>
+
+  <div id="datapane">result of query is</div>
+
+
+</body>
+
+
+</html>
+

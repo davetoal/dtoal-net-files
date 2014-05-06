@@ -1,0 +1,114 @@
+<html>
+<head>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.0/jquery.min.js" type="text/javascript" charset="utf-8"></script>
+
+<script>
+
+
+  var input_queue = [];
+
+  var output_queue = [];
+
+
+
+  var seconds_counter = 0;
+
+  function start_timers() {
+
+    var increment_seconds_interval = setInterval(function() { increment_seconds(); }, 1000);
+    var show_seconds_interval      = setInterval(function() { show_seconds(); }, 500);
+
+    var process_queues_interval    = setInterval(function() { process_queues(); }, 5000);
+
+  }
+
+  function increment_seconds() {
+    seconds_counter++;
+    if (seconds_counter > 59) { seconds_counter = 0; }
+  }
+
+  function show_seconds() { $('#clock_div').html('time: ' + seconds_counter); }
+
+
+
+
+  function show_input_queue() {
+    $('#input_queue_div').html('');
+    for (var item in input_queue) { $('#input_queue_div').append('<li>' + input_queue[item] + '</li>'); }
+  }
+
+
+  function show_output_queue() {
+    $('#output_queue_div').html('');
+    for (var item in output_queue) { $('#output_queue_div').append('<li>' + output_queue[item] + '</li>'); }
+  }
+
+
+
+  function add_item_to_input() {
+    input_queue.push('this item added at ' + seconds_counter + ' seconds');
+    show_input_queue();
+  }
+
+
+  function process_queues() {
+
+    if (input_queue.length == 0) { 
+      $('#input_queue_label').html('input queue empty');
+      setTimeout(function() { $('#input_queue_label').html('input queue'); }, 1000);
+      return;
+    } else {
+      $('#output_queue_label').html('output queue processing');
+      setTimeout(function() { $('#output_queue_label').html('output queue'); }, 1000);
+    }
+
+    var item = input_queue.shift();
+    show_input_queue();
+
+    output_queue.push(item);
+    show_output_queue();
+
+  }
+
+
+  function clear_output() {
+    output_queue = [];
+    show_output_queue();
+  }
+
+
+</script>
+
+</head>
+
+<body onload="start_timers()">
+
+  <br>
+  <p>Test timers and global arrays
+
+  <br>
+
+  <input type="button" value="add item to input" onclick="add_item_to_input();">
+  <input type="button" value="clear output queue" onclick="clear_output();">
+
+
+  <br>
+
+  <div id="clock_div">time: 0</div>
+
+  <br>
+
+  <table id="output_table" border="0" cellpadding="0" cellspacing="0">
+        <tr>
+                <td width="350" id="input_queue_label">input queue</td>
+                <td width="350" id="output_queue_label">output queue</td>
+        </tr>
+  	<tr>
+		<td valign="top"><div id="input_queue_div"></div></td>
+		<td valign="top"><div id="output_queue_div"></div></td>
+  	</tr>
+  </table>
+
+
+

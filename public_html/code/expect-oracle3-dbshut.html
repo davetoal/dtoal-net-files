@@ -1,0 +1,45 @@
+<html><head><title>expect-oracle3-dbshut</title></head>
+<pre>
+#!/usr/local/bin/expect -f
+
+set timeout -1
+spawn ksh
+match_max 100000
+
+send -- "rsh oracle3.employer.com\r"
+expect ")-&gt;"
+
+send -- ". ./.profile\r"
+expect ")-&gt;"
+
+send -- "svrmgrl\r"
+expect "SVRMGR&gt;"
+
+send -- "connect internal\r"
+expect "SVRMGR&gt;"
+
+send -- "select instance, status from v\$thread;\r"
+expect "SVRMGR&gt;"
+
+send -- "shutdown immediate\r"
+expect "SVRMGR&gt;"
+
+send -- "startup mount\r"
+expect "SVRMGR&gt;"
+
+send -- "alter database archivelog;\r"
+expect "SVRMGR&gt;"
+
+send -- "alter database open;\r"
+expect "SVRMGR&gt;"
+
+send -- "shutdown immediate\r"
+expect "SVRMGR&gt;"
+
+send -- "exit\r"
+expect ")-&gt;"
+
+send -- "exit\r"
+
+
+</pre><html>

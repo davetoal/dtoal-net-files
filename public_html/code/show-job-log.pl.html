@@ -1,0 +1,705 @@
+<html><head><title>show-job-log.pl</title></head>
+<pre>
+
+
+# dave toal
+# scrolling display of work* and runs,
+# server3         |===============XOM==============|
+# server4 |IBM|  |==SJM===|
+# zoom in on scale to see shorter ones,
+# position scroller moves chart back to beginning of select window
+# bind position click on scrollable canvas to list window of item's info
+#
+
+use strict;
+
+use Tk;
+
+use Win32::OLE;
+
+# use lib 'r:\Resource\GPD\Std\ver1.2';
+# use CdsSmtp;
+
+use lib "./lib";
+use Date::Parse;
+
+
+my $i = new MainWindow;
+$i-&gt;title("joblogoscope");
+
+my $c = $i-&gt;Frame( -height =&gt; 600, -width =&gt; 900,
+                   -relief =&gt; 'flat', -bd =&gt; 2, );
+
+$c-&gt;pack;
+
+
+my $hourtotal = 3600;
+my $xmax = $hourtotal * 6;
+# view window scrolls back 6 hours
+
+my $pixscale = 1;
+# str2time seconds / $pixscale = pixels on graph page from end
+# maybe not, or change this with slider before update
+
+my $canv = $c-&gt;Scrolled('Canvas', -height =&gt; 500, -width =&gt; 760, 
+                                  -relief =&gt; 'groove', -bd =&gt; 2, -background =&gt; "#dee5d0",
+                         -scrollbars =&gt; "soe", -scrollregion =&gt; [0, 0, $xmax, 500], 
+                         -xscrollincrement =&gt; 60 )
+             -&gt;place( -x =&gt; 90, -y =&gt; 10 );
+
+
+# get reference to actual underlying canvas
+my ($window, undef) = $canv-&gt;Subwidget();
+
+# binding to mouse buttons
+$window-&gt;Tk::bind("&lt;1&gt;" =&gt; [\&showpos1, Ev('x'), Ev('y')] );
+$window-&gt;Tk::bind("&lt;2&gt;" =&gt; [\&showpos2, Ev('x'), Ev('y')] );
+$window-&gt;Tk::bind("&lt;3&gt;" =&gt; [\&showpos3, Ev('x'), Ev('y')] );
+
+
+my @machines = qw( server3 server4 server5 server7 serverfp1 );
+
+my $boxes = "\'";
+$boxes .= join("\', \'", @machines);
+$boxes .= "\'";
+
+my %mach_y;
+
+my $y = 65;
+
+for my $box (@machines) {
+  if ($box =~ /serverfp1/) { $y += 45; }
+  $i-&gt;Label( -text =&gt; $box ) -&gt; place( -x =&gt; 10, -y =&gt; $y );
+  $mach_y{$box} = $y;
+  $y += 85;
+}
+
+# 480, move down 75
+my $b0 = $c-&gt;Button( -text =&gt; " query from job log ", -command =&gt; \&update ) -&gt; place( -x =&gt; 20, -y =&gt; 555 );
+
+my ($sttxt, $entxt);
+
+# window is fixed at six hours, only input is end time, default is current,
+
+# v 2, bit wider, 900?  and 12 hours.  also look at 1 minute per pixel, have to show separate runs by alternating colours
+# no label just rt ck &c.
+
+
+$c-&gt;Label(-text =&gt; "query start time") -&gt; place( -x =&gt; 150, -y =&gt; 557 );
+# my $startent = $c-&gt;Entry(-width =&gt; 22, -textvariable =&gt; \$sttxt ) -&gt; place( -x =&gt; 235, -y =&gt; 557 );
+my $startent = $c-&gt;Label(-width =&gt; 22, -textvariable =&gt; \$sttxt, -relief =&gt; 'sunken') -&gt; place( -x =&gt; 235, -y =&gt; 557 );
+
+$c-&gt;Label(-text =&gt; "end time") -&gt; place( -x =&gt; 410, -y =&gt; 557 );
+my $endent   = $c-&gt;Entry(-width =&gt; 22, -textvariable =&gt; \$entxt ) -&gt; place( -x =&gt; 465, -y =&gt; 557 );
+
+# my $endrange = $entxt ? $entxt : timestamp();
+$entxt = timestamp();
+
+$c-&gt;Label(-text =&gt; "6 hours, rendering at 1 second per pixel") -&gt; place( -x =&gt; 650, -y =&gt; 557 );
+
+# slider for pixelscale?
+
+# buttons to add subtract hours etc to endrange and update sttxt and entxt
+
+my %items;
+# files drawn info
+
+
+# run tk
+MainLoop();
+
+
+
+sub display {
+
+  my $i = shift;
+
+  # for my $k (keys %$i) { print "$k, $i-&gt;{$k}\n"; }
+
+  print "$i-&gt;{'job_name'}, $i-&gt;{'run_number'}, $i-&gt;{'short_file_name'}\n"; 
+  print "  $i-&gt;{'start_date_time'} to $i-&gt;{'end_date_time'}, $i-&gt;{'machine'}, $i-&gt;{'return_message'}\n";
+  print "\n";
+
+}
+
+
+
+sub showpos1 {
+
+  my($id, $mx, $my) = @_;
+
+  # get offset of window to underlyling canvas
+  my $offsetx = $window-&gt;canvasx(0);
+  my $offsety = $window-&gt;canvasy(0);
+
+  # print "1: mx $mx my $my, offsetx $offsetx offsety $offsety\n";
+
+  my $px = $mx + $offsetx;
+  my $py = $my + $offsety;
+
+  my $ax = $px - 1;
+  my $ay = $py - 1;
+  my $bx = $px + 1;
+  my $by = $py + 1;
+
+  $canv-&gt;create('rectangle', $ax, $ay, $bx, $by, -fill =&gt; 'black');
+
+  # check whether mx my is inside bbox of any known items
+  for my $i (keys %items) {
+    if ($px &gt; $items{$i}{'left'} and $px &lt; $items{$i}{'right'} 
+    and $py &gt; $items{$i}{'top'}  and $py &lt; $items{$i}{'bottom'} ) {
+      display($items{$i});
+    }
+  }
+
+}
+
+
+
+sub showpos2 {
+
+  my($id, $mx, $my) = @_;
+
+  # get offset of window to underlyling canvas
+  my $offsetx = $window-&gt;canvasx(0);
+  my $offsety = $window-&gt;canvasy(0);
+
+  # print "2: mx $mx my $my, offsetx $offsetx offsety $offsety, $mouseX, $mouseY\n";
+  # print "2: mx $mx my $my, offsetx $offsetx offsety $offsety\n";
+  # print "\n";
+
+  my $px = $mx + $offsetx;
+  my $py = $my + $offsety;
+
+  my $ax = $px - 1;
+  my $ay = $py - 1;
+  my $bx = $px + 1;
+  my $by = $py + 1;
+
+  # $canv-&gt;create('rectangle', $ax, $ay, $bx, $by, -fill =&gt; 'green', -outline =&gt; 'green');
+  # why does line not draw to the last pixel, but rect does?
+  $canv-&gt;create('line', $px, $ay, $px, $by + 1);
+  $canv-&gt;create('line', $ax, $py, $bx + 1, $py);
+
+
+  # all other data on run, 
+
+  for my $i (keys %items) {
+    if ($px &gt; $items{$i}{'left'} and $px &lt; $items{$i}{'right'} 
+    and $py &gt; $items{$i}{'top'}  and $py &lt; $items{$i}{'bottom'} ) {
+
+      my $sfn = $items{$i}{'short_file_name'};
+      $sfn =~ s/\.zip//gi;
+      $sfn =~ s/\.tpe//gi;
+      print     "list-job-log.pl $sfn\n";
+      # my @ljl = `list-job-log.pl $sfn`;
+      # for (@ljl) { print "$_" }
+      # print "\n";
+
+      print     "list-job-tracking.pl $sfn\n";
+      # my @ljt = `list-job-tracking.pl $sfn`;
+      # for (@ljt) { print "$_" }
+      # print "\n";
+
+      unless ($items{$i}{'job_name'} =~ /sample/i) {
+        my $dssname = $items{$i}{'job_name'} . "_" . $items{$i}{'run_number'} . "%";
+        print "list-dss.pl $dssname\n";
+        my @ld = `list-dss.pl $dssname`;
+        for (@ld) { print "$_" }
+        print "\n";
+      }
+
+      # for my $kk (keys %{$items{$i}}) { print "key is $kk, val is $items{$i}{$kk}\n" }
+      # print "\n";
+
+      print "\n";
+
+    }
+  }
+
+}
+
+
+
+sub showpos3 {
+
+  my($id, $mx, $my) = @_;
+
+  # get offset of window to underlyling canvas
+  my $offsetx = $window-&gt;canvasx(0);
+  my $offsety = $window-&gt;canvasy(0);
+
+  # print "3: mx $mx my $my, offsetx $offsetx offsety $offsety\n";
+
+  my $px = $mx + $offsetx;
+  my $py = $my + $offsety;
+
+  my $ax = $px - 1;
+  my $ay = $py - 1;
+  my $bx = $px + 1;
+  my $by = $py + 1;
+
+  $canv-&gt;create('rectangle', $ax, $ay, $bx, $by, -fill =&gt; 'blue', -outline =&gt; 'blue');
+
+  for my $i (keys %items) {
+    if ($px &gt; $items{$i}{'left'} and $px &lt; $items{$i}{'right'} 
+    and $py &gt; $items{$i}{'top'}  and $py &lt; $items{$i}{'bottom'} ) {
+
+      if ($items{$i}{'job_name'} =~ /sample/i) {
+        print "select from notification table for $items{$i}{'job_name'} $items{$i}{'run_number'}\n";
+        print "\n";
+        # system("ls -l \\\\Csavcdsfp1\\resource\\Release\\$items{$i}{'short_file_name'}*");
+        # print "\n";
+        system("unzip -l \\\\Csavcdsfp1\\resource\\Release\\$items{$i}{'short_file_name'}*");
+        print "\n";
+      } else {
+        # print "select from job_tracking for $items{$i}{'job_name'} $items{$i}{'run_number'}\n";
+        # my @fields = qw(Run_Number Job_Name Total_Sets Date_Time Region Print_Status);
+        my @fields = qw(Run_Number Job_Name Total_Sets Region Print_Status);
+        my $ft = join("\t", @fields);
+        print "$ft\n";
+        my $f = join(", ", @fields);
+        my $query = " select $f from job_tracking where job_number like '" . $items{$i}{'job_name'} . "'";
+        $query .= " and run_number = " . $items{$i}{'run_number'};
+        $query .= " order by date_time desc";
+        my $dbh = get_db_handle();
+        my $l = get_info_list($query, $dbh, \@fields);
+        $dbh-&gt;Close();
+        for my $r (@$l) {
+          for my $k (@fields) {
+            next if ($k =~ /date_time/i);
+            print "$r-&gt;{$k}\t";
+          }
+          print "\n";
+        }
+        print "\n";
+        my @als = `ls -l \\\\serverfp1\\resource\\Archives\\Contract_Runs\\$items{$i}{'job_name'}\\Run_$items{$i}{'run_number'}\\Print_Files`;
+        for (@als) { next if (/^total/); print "$_" }
+        print "\n";
+
+        my $fn = $items{$i}{'short_file_name'};
+        $fn =~ s/\.zip//gi;
+        
+        # print     "check-mailing-date.pl $fn\n";
+        my @cmd = `check-mailing-date.pl $fn`;
+        my @mdt = grep(/^mailing/, @cmd);
+        if ($mdt[0]) { 
+          for (@mdt) { print "$_" }
+        } else {
+          print "no mailing date listed\n";
+        }
+        print "\n\n";
+
+      }
+
+    }
+  }
+
+}
+
+
+
+sub draw_days {
+
+  my $start = shift;
+  my $end = shift;
+
+  # one pixel per second but include pixscale, should set that to 1
+  # find last round hour and calib minutes from that
+
+  print "draw_days, $start to $end\n";
+  print "\n";
+
+  my $endt = $end;
+
+  $endt =~ s/(\d{2}:\d{2}:\d{2})//;
+  my $entime = $1;
+  $endt =~ s/^\s+//;
+  $endt =~ s/\s+$//;
+  $entime =~ s/(\d{2}:\d{2}):\d{2}/$1:00/;
+  my $lastminute = "$entime $endt";
+  # print " last minute is $lastminute, ";
+
+  my $maxtime = str2time($end);
+  my $lastmin = str2time($lastminute);
+
+  my $lastdiff = $maxtime - $lastmin; 
+  # * pixscale;
+  my $lastminx = $xmax - $lastdiff;
+  # $canv-&gt;create('text', $lastminx, 390, -text =&gt; $lastminute);
+   
+  for (my $i = $lastminx; $i &gt; 0; $i -= 60) { $canv-&gt;create('line', $i, 500, $i, 495, -fill =&gt; 'black'); }
+
+  my $lasthour = $lastminute;
+  $lasthour =~ s/(\d{2}):\d{2}:00/$1:00:00/;
+  my $lasthourtime = "$1:00:00";
+  # print "last hour is $lasthour, $lasthourtime\n";
+
+  my $lasthr = str2time($lasthour);
+  my $lasthrdiff = $maxtime - $lasthr;
+  my $lasthrx = $xmax - $lasthrdiff;
+
+  for (my $hr = $lasthr + 3600; $hr &gt; str2time($start); $hr -= 300) {
+    my ($s,$m,$h,$day,$month,$year,$zone) = localtime($hr);
+    # zone isn't right but only using this for clock time
+    $h = "0$h" if ($h &lt; 10);
+    $m = "0$m" if ($m &lt; 10);
+    $s = "0$s" if ($s &lt; 10);
+    # my $hrtime = "$h:$m:$s";
+    my $hrtime = "$h:$m";
+    my $hrdiff = $maxtime - $hr;
+    my $hrx = $xmax - $hrdiff;
+    # print "hr is $hr, $hrtime\n";
+    $canv-&gt;create('text', $hrx, 490, -text =&gt; $hrtime);
+  }
+
+}
+
+
+
+sub draw_runs {
+
+  my $list  = shift;
+  my $f     = shift;
+  my $start = shift; 
+  my $now   = shift;
+
+  $sttxt = $start;
+  $entxt = $now;
+
+  # for my $ref (@{$list}) { for my $key (@{$fields}) { print "key is $key, value is $ref-&gt;{$key}\n"; } }
+  # my @fields = qw( job_name run_number stdate stsec endate ensec short_file_name machine return_message);
+  # key is stdate, value is Dec 15 2008  5:00PM
+
+  print "now is $now\n";
+
+  my %display;
+  # $display{'server3-0'}-&gt;[21435] = 1 if something ran at that second
+
+  # clear the canvas
+  my @itemlist = $canv-&gt;find('all');
+  for my $item (@itemlist) { $canv-&gt;delete($item); }
+
+  # drop any canvas click info before redrawing
+  # %cc = {};
+
+  # drop all previous update's item info also
+  %items = {};
+
+  for my $row (@{$list}) {
+
+    my @s = split(/\s+/, $row-&gt;{$f-&gt;[2]});
+    my $stsec = $row-&gt;{$f-&gt;[3]};
+    $stsec = "0" . $stsec if ($stsec &lt; 10);
+    # print "started $s[3] $stsec, ";
+
+    my @e  = split(/\s+/, $row-&gt;{$f-&gt;[4]});
+    my $ensec = $row-&gt;{$f-&gt;[5]};
+    $ensec = "0" . $ensec if ($ensec &lt; 10);
+    # print "ended $e[3] $ensec, ";
+
+    # print "$row-&gt;{$f-&gt;[6]}, ";
+    # started 4:18PM 28, ended 4:19PM 49, LXBK_UC_ST_AUTO_15152825.tpe.zip
+
+    my $sttime = $s[3];
+    $sttime =~ s/([A|P]M$)//;
+    my $stmerid = $1;
+    $sttime .= ":$stsec $stmerid";
+    my $stdate = "$s[0] $s[1] $s[2] $sttime";
+
+    my $entime = $e[3];
+    $entime =~ s/([A|P]M$)//;
+    my $enmerid = $1;
+    $entime .= ":$ensec $enmerid";
+    my $endate = "$e[0] $e[1] $e[2] $entime";
+
+    # print "$stdate to $endate, \n";
+
+    # $xmax = str2time($now) - str2time($start);
+    # $canv-&gt;configure( -width =&gt; $xmax );
+    # well no, maybe not
+
+    # my $startx = $xmax - ( ( str2time($now) - str2time($stdate) ) / $pixscale );
+    # my $endx   = $xmax - ( ( str2time($now) - str2time($endate) ) / $pixscale );
+
+    # if endate is one of those 1900 ones, set = startdate instead
+
+    my $startx = $xmax - ( str2time($now) - str2time($stdate) );
+    my $endx;
+    if ($endate =~ /Jan.1.1900/) { $endx = $startx + 5; }
+                           else  { $endx = $xmax - ( str2time($now) - str2time($endate) ); }
+    my $diffx = $endx - $startx;
+    my $midx = $startx + $diffx / 2;
+    # print "$startx to $endx, mid $midx ";
+    # print "$row-&gt;{$f-&gt;[6]}, $stdate to $endate\n";
+
+    my $box = lc($row-&gt;{$f-&gt;[7]});
+    # print "on $box, ";
+    my $y = $mach_y{$box};
+
+    $y += 10;
+    # push display rows down a bit
+    # print "at y $y, ";
+
+    # do sum of splice of array instead of all this,
+
+    my $offset = 0;
+
+    my $notdone = 1;
+    while($notdone) {
+      my $boxqueue = "$box" . "_" . $offset;
+      my $occupied = 0;
+      for (my $i = $startx; $i &lt;= $endx; $i++) { $occupied = 1 if ($display{$boxqueue}-&gt;[$i]); }
+
+      if ($occupied) {
+        $offset++;
+      } else {
+        $notdone = 0;
+        # print "processing row $offset, ";
+        for (my $i = $startx; $i &lt;= $endx; $i++) { $display{$boxqueue}-&gt;[$i]++; }
+      }
+    }
+
+    # spacing between rows listed for each machine
+    my $wh = 20;
+    my $w = ( $wh / 2 ) - 2;
+
+    $y -= $offset * $wh;
+    # print "at queue y $y\n";
+
+    # draw items
+
+    my $color = "black";
+    my $fc = "#cccccc";
+    my $retmsg = $row-&gt;{$f-&gt;[8]};
+    my $jobnam = $row-&gt;{$f-&gt;[0]};
+    my $filnam = $row-&gt;{$f-&gt;[6]};
+
+    if (($jobnam =~ /^00\dcs\d{3,4}/i) or ($jobnam =~ m/^00\dcny0\d{2,3}$/i)) {
+      # $fc = "#b590b5";
+      # $fc = "#d5b5d5" if ($jobnam =~ /sample/i);
+      $fc = "#84c856";
+      $fc = "#cdeaba" if ($jobnam =~ /sample/i);
+    }
+
+    $color = "blue"                    if ( ! ($retmsg =~ /Successful/));
+    $color = "black",  $fc = "#e3906f" if ($retmsg =~ /disk timed out/);
+    $color = "red",    $fc = "#e3906f" if ($retmsg =~ /timestamp/);
+    $color = "blue",   $fc = "#e3906f" if ($retmsg =~ /encompass/);
+    $color = "yellow", $fc = "#dcc99c" if ($retmsg =~ /empty tax file/);
+    $color = "orange", $fc = "#84c856" if ($jobnam =~ /^001cs0075$/i);
+    $color = "yellow", $fc = "#84c856" if ($jobnam =~ /^003cp0001$/i);
+    $color = "black",  $fc = "#FFFFFF" if ($endate =~ /Jan.1.1900/);
+
+    # print "jobname is $jobnam, $color, $fc\n";
+
+    $canv-&gt;create('rectangle', $startx, $y - $w, $endx, $y + $w, -fill =&gt; $fc); 
+
+    $canv-&gt;create('line', $startx, $y + $w, $endx, $y + $w, -fill =&gt; $color); 
+    $canv-&gt;create('line', $startx, $y - $w, $endx, $y - $w, -fill =&gt; $color); 
+    $canv-&gt;create('line', $startx, $y - $w, $startx, $y + $w, -fill =&gt; $color); 
+    $canv-&gt;create('line', $endx,   $y - $w, $endx,   $y + $w, -fill =&gt; $color); 
+
+    $canv-&gt;create('text', $midx, $y, -text =&gt; $row-&gt;{$f-&gt;[6]});
+
+
+    # add points, retmsg, filnam etc to hash of click locations on canvas by startx endx y
+    # click on draws tagged rectangle, text at curpos +xy and deletes all on release, 2nd click, ?
+    # $items by unique file name and run number
+
+    my $itemid = "$row-&gt;{$f-&gt;[6]} $row-&gt;{$f-&gt;[1]}";
+
+    $items{$itemid}{'left'}   = $startx;
+    $items{$itemid}{'right'}  = $endx;
+    $items{$itemid}{'top'}    = $y - $w;
+    $items{$itemid}{'bottom'} = $y + $w;
+
+    $items{$itemid}{'job_name'}        = $row-&gt;{$f-&gt;[0]};
+    $items{$itemid}{'run_number'}      = $row-&gt;{$f-&gt;[1]};
+    $items{$itemid}{'short_file_name'} = $row-&gt;{$f-&gt;[6]};
+    $items{$itemid}{'machine'}         = $row-&gt;{$f-&gt;[7]};
+    $items{$itemid}{'return_message'}  = $row-&gt;{$f-&gt;[8]};
+
+    $items{$itemid}{'start_date_time'}  = $stdate;
+    $items{$itemid}{'end_date_time'}    = $endate;
+
+  }
+
+  draw_days($start, $now);
+
+} 
+
+
+
+# this is messy but refresh the query window to current time
+# if the button is clicked and no different string is entered
+
+my $oldentxt;
+
+sub update {
+
+  print "updating\n";
+
+  # if nothing passed from entry fields, end time is now and start time is six hours ago
+
+  my $endrange;
+  if ($oldentxt ne $entxt) {
+    print "different entxt $entxt\n";
+    $endrange = $entxt ? $entxt : timestamp();
+    $oldentxt = $entxt;
+  } else {
+    print "same entxt $entxt\n";
+    $endrange = timestamp();
+  }
+  my $endstr = str2time($endrange);
+
+  my $startstr = $endstr - $xmax;
+  # * $pixscale again
+
+  my ($s, $m, $h, $dayOfMonth, $month,
+      $yearOffset, $dayOfWeek, $dayOfYear, $daylightSavings) = localtime($startstr);
+  $h = "0$h" if ($h &lt; 10);
+  $m = "0$m" if ($m &lt; 10);
+  $s = "0$s" if ($s &lt; 10);
+  $month++; $yearOffset += 1900;
+  my $starttime = "$month/$dayOfMonth/$yearOffset $h:$m:$s";
+  # my $startrange = $sttxt ? $sttxt : $starttime;
+  my $startrange = $starttime;
+
+  # print "window start at starttime $starttime startrange $startrange\n";
+
+  # my @fields = qw( job_name run_number start_date_time end_date_time short_file_name machine return_message);
+  # add return_message, &c, show disk failed runs
+  # or other colours for empty tax file, common fail causes, migration issue,
+
+  my @fields = qw( job_name run_number stdate stsec endate ensec short_file_name machine return_message );
+  my $list = join(", ", @fields);
+
+  my $query = "select job_name, run_number, " . 
+              " left(start_date_time, 90) as stdate, datename(ss, start_date_time) as stsec," . 
+              " left(end_date_time, 90) as endate, datename(ss, end_date_time) as ensec, " . 
+              " short_file_name, machine, return_message" .
+              " from job_log" .
+              " where start_date_time &gt; '" . $startrange . "'" .
+              " and start_date_time &lt; '" . $endrange . "'" .
+              " and machine in ( " . $boxes . " )" . 
+              " order by start_date_time";
+
+  print "$query\n";
+
+  my $dbh = get_db_handle();
+  my $list = get_info_list($query, $dbh, \@fields);
+  print "query done\n";
+
+  draw_runs($list, \@fields, $startrange, $endrange);
+
+}
+
+
+
+
+sub timestamp {
+
+  my ($second, $minute, $hour, $dayOfMonth, $month,
+      $yearOffset, $dayOfWeek, $dayOfYear, $daylightSavings) = localtime();
+
+  $second = "0" . $second if ($second &lt; 10);
+  $minute = "0" . $minute if ($minute &lt; 10);
+  $hour   = "0" . $hour   if ($hour &lt; 10);
+
+  $month++;
+  my $year = 2000 + ( $yearOffset - 100 );
+  my $date = "${month}/${dayOfMonth}/${year}";
+
+  my $dt = "$date" . " " . "$hour:$minute:$second";
+
+  return $dt;
+
+}
+
+
+
+sub get_info {
+
+  my ($query, $connection, $field) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    push(@list, $rs-&gt;Fields($field)-&gt;{'value'} );
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+# sub get_info_hash {
+sub get_info_list {
+
+  my ($query, $connection, $fields) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    my %row;
+    for my $field (@{$fields}) {
+      $row{$field} = $rs-&gt;Fields($field)-&gt;{'value'};
+    } 
+    push(@list, \%row);
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub get_db_handle {
+
+  my $server = 'server\CDS';
+
+  my $database = 'database';
+  my $user     = 'user';
+  my $passwd   = 'password';
+
+  my $dsn = "Provider=SQLOLEDB.1;Password=$passwd;Persist Security Info=False;";
+  $dsn   .= "User ID=$user;Initial Catalog=$database;Data Source=$server;";
+
+  my $connection = Win32::OLE-&gt;new('ADODB.Connection') or die "Cannot get new connection: $!";
+
+  $connection-&gt;Open($dsn);
+
+  return $connection;
+
+}
+
+
+
+sub executeQuery {
+
+  my $query = shift;
+  my $connection = shift;
+
+  my $record_set = Win32::OLE-&gt;new('ADODB.Recordset');
+
+  $record_set = $connection-&gt;Execute($query);
+
+  if(! $record_set ) {
+    print     "error: " . Win32::OLE-&gt;LastError();
+    print LOG "error: " . Win32::OLE-&gt;LastError();
+  }
+
+  return $record_set;
+
+}
+
+
+</pre><html>

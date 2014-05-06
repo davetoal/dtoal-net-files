@@ -1,0 +1,227 @@
+<html>
+<head>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.0/jquery.min.js" type="text/javascript" charset="utf-8"></script>
+
+<script>
+
+
+  var interval;
+
+  var px;
+  var py;
+
+  var x;
+  var y;
+  var count;
+  var from_now;
+
+  var ball_x = 10, ball_y = 10;
+  var ball_vx = 3, ball_vy = 2;
+
+  var accel_g = 0.1;
+
+  var elastic_percentage = 0.95;
+
+  var min_x = 0, max_x = getWidth() - 40, min_y = 0, max_y = getHeight() - 40;
+
+  var bounce_delay = 1;
+  var bounce_interval = [];
+
+  var b_count = 0;
+
+
+  function add_divs() {
+
+    $('#test_div').append('<div id="one" style="position: absolute; left: 530; top: 380; border-radius: 5px; background-color: #a36200; opacity: 0.9; border: 1px black solid; padding: 10px;  ">test</div>');
+
+    $('#test_div').append('<div id="two" style="position: absolute; left: ' + ball_x + '; top: ' + ball_y + '; border-radius: 5px; background-color: #a36200; opacity: 0.5; border: 1px black solid; padding: 10px;  ">X</div>');
+
+  }
+
+
+
+  function start_one() {
+    
+    var p = document.getElementById("one").style;
+
+    var start_x = 10;
+    var start_y = 380;
+
+    x = start_x;
+    y = start_y;
+
+
+    move_to(800, 380, p);
+
+    count = 10;
+    interval = setInterval('move(10, 0.5, "one")', 1000 );
+
+
+
+
+    for (var i = 0; i < 20; i++) {
+
+      px = start_x + (i * 2);
+      py = start_y + (i * 0.3);
+
+      from_now = i * 1000;
+
+      // setTimeout(function() { move_to(px, py, p); }, from_now);
+
+    }
+
+      
+  }
+
+
+
+  function stop_one() {
+    clearInterval(interval);
+  }
+
+
+
+  function move_to(px, py, p) {
+    p.left = px; p.top = py; 
+  }
+  
+
+  function move(vx, vy, p_name) {
+
+    var p = document.getElementById("one").style;
+
+    x = x + vx;
+    y = y + vy;
+
+    p.left = x; p.top = y; 
+
+  }
+
+
+
+  function start_bounce() {
+    b_count++;
+    bounce_interval[b_count] = setInterval('bounce()', bounce_delay );
+  }
+
+    
+
+  function stop_bounce() {
+    clearInterval(bounce_interval[b_count]);
+    b_count--;
+  }
+
+
+
+  function bounce() {
+
+    var p = document.getElementById("two").style;
+
+    var tx, ty;
+
+    tx = ball_x + ball_vx;
+    ty = ball_y + ball_vy;
+
+    ball_vy = ball_vy + accel_g;
+
+    if (tx > max_x) {
+      tx = max_x;
+      ball_vx = ball_vx * -1;
+    }
+
+    if (tx < min_x) {
+      tx = min_x;
+      ball_vx = ball_vx * -1;
+    }
+
+    if (ty > max_y) {
+      ty = max_y;
+      ball_vy = ball_vy * elastic_percentage;
+      ball_vy = ball_vy * -1;
+    }
+
+    if (ty < min_y) {
+      ty = min_y;
+      ball_vy = ball_vy * -1;
+    }
+
+
+    ball_x = tx;
+    ball_y = ty;
+
+    p.left = ball_x;
+    p.top = ball_y;
+
+
+  }
+
+
+
+function getWidth() {
+
+    xWidth = 1921;
+
+    if(window.screen != null)
+      xWidth = window.screen.availWidth;
+
+    if(window.innerWidth != null)
+      xWidth = window.innerWidth;
+
+    if(document.body != null)
+      xWidth = document.body.clientWidth;
+
+    return xWidth;
+
+}
+
+
+function getHeight() {
+
+    xHeight = 900;
+
+    if(window.screen != null)
+      xHeight = window.screen.availHeight;
+
+    if(window.innerHeight != null)
+      xHeight = window.innerHeight;
+
+    if(document.body != null)
+      xHeight = document.body.clientHeight;
+
+    return xHeight;
+
+}
+
+
+
+function clear_test_divs() {
+  $('#test_div').html('');
+}
+
+
+
+</script>
+
+</head>
+
+<body>
+
+  <br>
+  <p>test div position 
+  <br>
+  <input type="button" value="add test divs" onclick="add_divs();">
+  <br>
+  <input type="button" value="start one" onclick="start_one();">
+  <input type="button" value="stop one" onclick="stop_one();">
+  <br>
+  <input type="button" value="start bounce" onclick="start_bounce();">
+  <input type="button" value="stop bounce" onclick="stop_bounce();">
+  <br>
+  <input type="button" value="clear test divs" onclick="clear_test_divs();">
+  <br>
+  <div id="test_div"></div>
+
+</body>
+</html>
+

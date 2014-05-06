@@ -1,0 +1,64 @@
+<html><head><title>diskcheck.pl</title></head>
+<pre>
+
+
+# dave toal
+# every $interval seconds, write the time to a temp file on fp1
+# log timestamp and amount of time if over 1 second
+
+
+use strict;
+
+my $interval = 10;
+my $logfile  = "c:/temp/dtoal-diskmon-log.txt";
+my $testfile = "q:/temp/dtoal-testfile.txt";
+
+
+
+while (1) {
+
+  my $start = time();
+
+  my $t = localtime $start;
+
+  open(TEST, "&gt; $testfile");
+
+  my $retcode = print TEST "$t\n";
+
+  my $end = time();
+
+  my $diff = $end - $start;
+
+  if ( !$retcode or ($diff &gt; 1) ) {
+
+    my $status = $retcode ? "successful" : "unsuccessful";
+
+    print     "write took $diff seconds, $status, at $t\n";
+
+    my @netuse = `net use`;
+
+    my @ping = `ping csavcdsfp1`;
+
+    open(LOG, "&gt;&gt;$logfile");
+    print LOG "write took $diff seconds, $status, at $t\n\n";
+    for (@netuse) { print LOG "$_"; }
+    for (@ping)   { print LOG "$_"; }
+    print LOG "\n===================================================================================\n\n";
+    close(LOG);
+
+  }
+
+  print "took $diff seconds at $t\n";
+
+  print "please do not close this session, this script is logging timeouts on the production /r drive\n";
+
+  close(TEST);
+
+  sleep $interval;
+
+}
+
+
+# printf "%s write took %2.1d seconds at %s\n", $retcode?"successful":"unsuccessful", $diff, $t;
+
+</pre><html>

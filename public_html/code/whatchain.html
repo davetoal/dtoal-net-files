@@ -1,0 +1,30 @@
+<html><head><title>whatchain</title></head>
+<pre>
+#!/bin/ksh
+#
+# sysmon:/appworx/bin/whatchain, dave toal, nov 20, 1998, T&T
+# give whatchain a module name and it returns the names of the chains that
+# that module is in.  lowercase is okay, and "%" is the wildcard character.
+#
+
+[ "$1" = "-h" ] && { 
+  grep \# $0 | grep -v grep | grep -v "n/ks" | tr '#' ' '
+  exit 0
+}
+
+[ -z "$1" ] && {
+  echo "\n  whatchain &lt;modulename&gt;\n\n  % is a valid wildcard. \n"
+  exit 0
+}
+
+name=`echo "$1" | tr '[a-z]' '[A-Z]'`
+
+echo "select a.so_chain_name, c.so_module from sqladmin.so_chain_header a, \
+  sqladmin.so_chain_detail b, sqladmin.so_job_table c where a.so_chain_seq \
+  = b.so_chain_seq and b.so_job_seq = c.so_job_seq and c.so_module like \
+  '$name';" | \
+  sqlplus -s admin/password | grep -v SO_ | grep -v "\-\-\-" | \
+  grep -v "^$" | grep -v "rows selected"
+
+
+</pre><html>

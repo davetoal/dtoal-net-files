@@ -1,0 +1,69 @@
+<html>
+<head>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.0/jquery.min.js" type="text/javascript" charset="utf-8"></script>
+
+<script>
+
+
+  if (window.File && window.FileReader && window.FileList && window.Blob) {
+    console.log('file api supported');
+  } else {
+    console.log('file api not supported');
+  }
+
+
+  function handleFileSelect(evt) {
+
+    var files = evt.target.files; // FileList object
+
+    // files is a FileList of File objects. List some properties.
+
+    var output = [];
+
+    for (var i = 0, f; f = files[i]; i++) {
+
+      console.log('f is ' + JSON.stringify(f));
+
+      output.push('<li>', escape(f.name), ' (', f.type || 'n/a', ') - ',
+                  f.size, ' bytes, last modified: ',
+                  f.lastModifiedDate ? f.lastModifiedDate.toLocaleDateString() : 'n/a',
+                  '</li>');
+
+    }
+
+
+    document.getElementById('list').innerHTML = '<ul>' + output.join('') + '</ul>';
+  }
+
+
+
+  function add_listener_for_files() {
+    document.getElementById('files').addEventListener('change', handleFileSelect, false);
+  }
+
+
+</script>
+
+</head>
+
+<body onload="add_listener_for_files()">
+
+  <br>
+  <p>Test file api, <a href="http://www.html5rocks.com/en/tutorials/file/dndfiles/">html5rocks.com</a>
+
+  <br>
+
+  <input type="button" value="button" onclick="do_nothing()">
+
+  <br>
+
+  <input type="file" id="files" name="files[]" multiple />
+
+  <output id="list"></output>
+
+  <div id="div"></div>
+
+</body>
+</html>
+

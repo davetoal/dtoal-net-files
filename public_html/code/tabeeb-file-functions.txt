@@ -1,0 +1,281 @@
+
+case-objects.js
+        get_case_info(case_id) 
+
+case-timeline.js
+        load_case_timeline(events) 
+        scroll_events_from_timeline() 
+
+case-events.js
+        init_case_events_page() 
+        get_case_id() 
+        load_case_events_info(case_info) 
+        bookmark_current_case() 
+        bookmark_case( bookmark_data ) 
+
+case-events-functions.js
+        load_case_events(events, width, left_margin, left_padding, right_padding, tags, comments) 
+        toggle_comment_display(e, div) 
+
+case-events-touch-functions.js
+        events_touch_start(e) 
+        events_touch_move(e) 
+        events_touch_end(e) 
+        toggle_event_from_icon(div) 
+        toggle_event_from_paragraph(div) 
+        display_tag_information(div, word) 
+
+case-events-hgraph-functions.js
+        create_hgraph_icon( patient_div, patient_info_height, case_title_background_left_margin ) 
+
+case-events-status-menu-functions.js
+        toggle_case_status_button_menu() 
+        create_case_status_button_menu( menu_top, menu_left, menu_width, status_button_height, menu_font_size, case_status ) 
+        ping_server_and_update_global_current_case() 
+
+case-events-tag-functions.js
+        toggle_tags_list_display( case_tags_top_padding, case_tags_left_padding, case_tags_right_margin, case_tags_radius, tags ) 
+
+case-events-add-event-functions.js
+        add_event_from_case_events() 
+
+case-events-publish-functions.js
+        add_publish_case_input() 
+        scroll_case_events_to_the_end() 
+        choose_most_helpful_doctor( div ) 
+        change_conclusion_text_input_color() 
+        publish_this_case() 
+        cancel_publish_this_case() 
+
+case-summary.js
+        load_case_summary(case_summary, width, left_margin, left_padding, right_padding) 
+        toggle_case_summary(width, left_padding, right_padding) 
+        add_case_summary_opacity_divs(width, left, right, bottom) 
+
+case-comments.js
+        load_case_comments(case_info) 
+        load_case_comments_threaded(case_info) 
+        load_case_comments_recent() 
+        load_case_comments_by_dr() 
+        load_case_comments_by_specialist() 
+        add_case_comment(i, comment, case_info) 
+
+case-comment-functions.js
+        add_new_comment() 
+        add_new_comment_dialog() 
+        bind_spellcheck_and_tagcheck_to_new_comment() 
+        save_new_comment() 
+        return_to_case_events_from_new_comment(reload_comments) 
+        remove_divs_for_add_new_comment(reload_comments) 
+        take_a_photo() 
+        attach_a_photo() 
+
+case-comment-touch-functions.js
+        bind_comments_touch_events(div_id) 
+        comments_touch_start(e)  
+        comments_touch_move(e, div)  
+        comments_touch_end(e, div)  
+        toggle_comment_helpful(div_id) 
+        scroll_events_to_comment( div_id ) 
+
+case-comment-timestamp-functions.js
+        time_since( timestamp ) 
+
+case-list-functions.js
+        init_case_list_page() 
+        set_global_current_id_and_load_case_events(div) 
+        set_global_current_id_and_load_create_case(div) 
+        set_case_list_option(div) 
+
+case-list-api-functions.js
+        list_my_bookmarks_for( doctor_id ) 
+        get_my_bookmarks_from_api( doctor_id ) 
+        list_my_cases_for( doctor_id ) 
+        get_my_cases_from_api( doctor_id ) 
+        list_cases_from_global_case_info() 
+        list_cases_from_case_info_api_list( case_info_api_list ) 
+        list_cases_from( case_info ) 
+
+case-list-search-functions.js
+        search_cases() 
+        search_cases_for( search_word ) 
+
+case-list-menu-functions.js
+        add_case_list_filter_menu_items( nav_header_height, options_font_size, mode ) 
+        add_case_list_filter_drop_down_menu( nav_header_height, options_font_size ) 
+        add_case_list_active_filter_item( nav_header_height, options_font_size ) 
+        add_case_list_draft_filter_item( nav_header_height, options_font_size ) 
+        add_case_list_published_filter_item( nav_header_height, options_font_size ) 
+        add_case_list_bookmarks_filter_item( nav_header_height, options_font_size ) 
+        create_case_list_filter_option_menu( nav_header_height, options_font_size, option_list ) 
+        toggle_case_list_filter_option_menu() 
+        load_case_list_filter_option( div ) 
+        create_case_list_sort_menu( nav_header_height, options_font_size ) 
+        toggle_case_list_sort_menu() 
+        set_case_list_sort_option( div ) 
+
+case-create-functions.js
+        init_create_case_page() 
+        get_new_case_id() 
+        load_create_case_inputs(case_id) 
+
+case-create-submit-functions.js
+        add_case_title_input() 
+        add_case_summary_input() 
+        add_case_event_input() 
+        submit_case() 
+        create_case_cancel_button_menu(cancel_button_top, cancel_button_left, cancel_button_width, cancel_button_height, button_font_size) 
+        toggle_cancel_button_menu() 
+        cancel_button_submit_as_draft() 
+        cancel_button_delete_draft( delete_flag ) 
+        cancel_submit_case() 
+        cancel_delete_case( delete_flag ) 
+        create_case_select_patient() 
+        add_patient_to_case() 
+        toggle_patient_selection( div_id ) 
+        submit_case_add_tags() 
+        submit_case_invite_doctors() 
+        cancel_add_event() 
+        update_case_and_event_ids( data, textStatus, case_id ) 
+
+case-create-error-functions.js
+        show_case_title_error_message() 
+        remove_case_title_error_message() 
+
+case-create-input-functions.js
+        add_case_input_divs(case_id) 
+        case_input_on_focus(row) 
+        case_input_on_blur(row) 
+        move_case_buttons_to_bottom_on_focus() 
+        move_case_buttons_to_bottom_on_blur() 
+        case_input_on_keydown(row) 
+        case_input_on_keypress(row) 
+        adjust_case_input_icons() 
+        case_input_touch_start(e) 
+        case_input_touch_move(e) 
+        case_input_touch_end(e) 
+
+case-create-input-icon-functions.js
+        case_input_icon_click(row) 
+
+case-create-input-image-functions.js
+        add_images_to_create_case_div(row_id, image_array) 
+
+case-create-calendar-functions.js
+        draw_calendar() 
+        draw_calendar_page(day_start, days_in_previous_month, days_in_this_month, highlighted_date) 
+        toggle_calendar_day_state(event, div) 
+        get_days_in_each_month() 
+        get_previous_month(month) 
+        get_starting_offset(day_of_week, day, month) 
+        cancel_calendar() 
+        add_date_to_paragraph() 
+        todays_date() 
+        get_time_zone_offset() 
+        get_number_of_month( month ) 
+
+case-create-calendar-touch-functions.js
+        bind_calendar_ui_year_events() 
+        bind_calendar_ui_month_events() 
+        calendar_ui_year_touch_start(e) 
+        calendar_ui_month_touch_start(e) 
+        calendar_ui_year_touch_move(e) 
+        calendar_ui_month_touch_move(e) 
+        toggle_calendar_month_state(event, div) 
+        toggle_calendar_year_state(event, div) 
+        update_calendar_date_selection() 
+        redraw_calendar_page() 
+
+case-create-category-functions.js
+        show_category_options(width, height) 
+        set_category(button) 
+        create_category_ui_div(width, height, bar_height) 
+        close_category_ui() 
+        set_case_input_category_button(current_row) 
+
+case-create-category-touch-functions.js
+        bind_category_ui_events() 
+        category_ui_touch_start(e) 
+        category_ui_touch_move(e) 
+        category_ui_touch_end(e) 
+
+case-create-tag-functions.js
+        create_case_add_tags() 
+        check_create_case_tags() 
+        edit_create_case_tags() 
+        get_new_tag_from_mongo(url, new_tag) 
+
+Tag_Check.js
+        Tag_Check( div_id ) 
+
+tag-check-stopword-list.js
+        get_stop_word_list() 
+
+tag-check-animation.js
+        append_tag_animation( this_word ) 
+
+Spell_Check.js
+        Spell_Check(div_id) 
+
+tabeeb-navigation-header.js
+        add_navigation_header() 
+        toggle_nav_panel() 
+        open_nav_panel() 
+        close_nav_panel() 
+        create_navigation_panel(screen_width, screen_height, bar_height) 
+
+patient-functions.js
+        init_patient_info_page() 
+
+patient-list-functions.js
+        init_patient_list_page() 
+        load_patient_info( div ) 
+
+patient-add-functions.js
+        init_add_patient_page() 
+        add_new_patient_info() 
+
+doctor-functions.js
+        init_dr_profile_page() 
+
+dashboard-functions.js
+        init_dashboard_page() 
+        bind_dashboard_touch_events() 
+        add_dashboard_columns() 
+        add_dashboard_buttons() 
+        show_global_variables() 
+        show_cookies() 
+        clear_cookies() 
+        set_page_height() 
+        dashboard_touch_start(e) 
+        dashboard_touch_move(e) 
+        dashboard_touch_end(e) 
+
+camera-functions.js
+        preview_input_image(input) 
+        set_preview_onload() 
+
+login-and-set-globals.js
+        init_login_page() 
+        check_global_variables() 
+        set_global_variables() 
+        get_global_variables() 
+        get_orientation_mode() 
+        set_cookie(name, value, days) 
+        get_cookie(name) 
+        erase_cookie(name) 
+
+page-handler.js
+        init_page() 
+        get_page_state() 
+        load_page(page) 
+        draw_page(template) 
+        get_case_events_template() 
+        get_dr_profile_template() 
+        get_patient_info_template() 
+        get_add_patient_template() 
+        get_patient_list_template() 
+        get_case_list_template() 
+        get_create_case_template() 
+        get_dashboard_template() 
+        get_login_page_template() 

@@ -1,0 +1,477 @@
+<html>
+<head>
+
+  <title>unique substrings from text</title>
+
+
+<script src="jquery.js"></script>
+
+<script type="text/javascript" language="javascript">
+
+
+  function update_output() {
+
+    $("#querypane").html("                              ");
+    $("#debugpane").html("select seg fin with start " + start + " and offset " + offset);
+    $("#locationpane").html("in update output");
+
+    var end = start + 59;
+
+    var params = "start=" + start + "&end=" + end;
+
+    $("#querypane").html("passing " + params + " to select seg fin");
+
+    $.ajax({
+      url: "select-seg-fin-from-segposition.php",
+      type: "GET",
+      data: params,
+      success: function(data){ update_table(data); }
+    });
+
+  }
+
+
+  function update_table(data) {
+
+    // split, update cells
+
+    $("#querypane").html("                              ");
+    $("#debugpane").html("data is " + data);
+    $("#locationpane").html("in update table");
+
+    var row = data.split("\;");
+
+    $("#querypane").html("row[1] is " + row[1]);
+
+    var segs = row[0].split(",");
+    var fins = row[1].split(",");
+
+    $("#querypane").html("segs[0], segs[1] is " + segs[0] + " " + segs[1]);
+
+    var i;
+
+    for (i = 0; i < 60; i++) {
+
+      var seg = "#seg" + i;
+      var fin = "#fin" + i;
+
+      $(seg).html(segs[i]);
+      $(fin).html(fins[i]);
+      
+    }
+
+  }
+
+
+  function graph_counts() {
+
+    var output_start = 10;
+    var output_step = 16;
+
+    c.clearRect(0, 0, canvas_width, canvas_height);
+
+    // marks across bottom of the graph at each letter in the output row
+
+    var y = 470;
+    var i;
+
+    c.fillStyle = "rgb(0,0,0)";  
+
+    for (i = 0; i < 60; i++) {
+      px = output_start + (output_step * i) + 2;
+      c.fillRect(px, y, 6, 1);
+    };
+
+    offsetx = output_start + (output_step * offset) + 2;
+    offsety = y - 30;
+
+    c.fillRect(offsetx, offsety, 6, 25);
+
+    // get the letters of the substrings from the #seg cells starting at $offset in the output table
+
+    var position = start + offset;
+
+    var querystring = "";
+    var querycount = 0;
+    var queryindex = offset;
+    var queryseg;
+    var debugstring = "";
+
+    while (querycount < 10) {
+      
+      queryseg = "#seg" + queryindex;
+
+      if (queryindex < 60) { querystring = querystring + $(queryseg).html(); };
+
+      $("#querypane").html(querystring);
+
+      var param = "query=" + querystring;
+
+      $.ajax({
+        url: "select-count-from-segcount.php",
+        type: "GET",
+        data: param,
+        success: function(data){ graph_column(data); }
+      });
+
+
+      function graph_column(data) {
+
+        $("#locationpane").html("in graph_column");
+        $("#debugpane").html("after select, data is " + data);
+
+        var px = offset + querycount;
+
+        var gx = output_start + (output_step * px) + 2;
+
+        var count = data.valueOf();
+
+        // exit the while loop if the count is low enough
+        if (count < 3) { querycount = querycount + 100; };
+
+        if (count > 400) { count = 400; };
+
+        var gy = 460 - count;
+
+        $("#querypane").html("rectangle at gx " + gx + " gy " + gy + " and count was " + count);
+
+        // c.fillRect(gx, 0, 6, gy);
+
+        c.fillRect(gx, 150, 6, 300);
+
+      };
+
+      queryindex++;
+
+      querycount++;
+
+    }
+
+    // $("#querypane").html("offsetx is " + offsetx );
+    // $("#debugpane").html("start is " + start + " and offset is " + offset + ".  graph at position " + position);
+    // $("#locationpane").html("in graph counts, with start " + start + " and offset " + offset);
+
+  }
+
+
+  function reset_start_and_offset() {
+
+    start = 0;
+    offset = 0;
+
+    c.clearRect(0, 0, canvas_width, canvas_height);
+
+    $("#querypane").html("                              ");
+    $("#debugpane").html("start is " + start + " and offset is " + offset);
+    $("#locationpane").html("in reset start and offset, start is " + start + " and offset is " + offset);
+
+    update_output();
+
+    graph_counts();
+
+  }
+
+
+  function start_back_10() {
+
+    start = start - 10;
+    if (start < 0) start = 0;
+
+    update_output();
+
+    graph_counts();
+
+  }
+
+
+  function start_forward_10() {
+
+    start = start + 10;
+
+    update_output();
+
+    graph_counts();
+
+  }
+
+  
+  function offset_back_10() {
+
+    offset = offset - 10;
+
+    if (offset < 0) offset = 0;
+
+    graph_counts();
+
+  }
+
+
+  function offset_back_1() {
+
+    offset = offset - 1;
+
+    if (offset < 0) offset = 0;
+
+    graph_counts();
+
+  }
+
+
+  function offset_forward_1() {
+
+    offset = offset + 1;
+
+    graph_counts();
+
+  }
+
+
+  function offset_forward_10() {
+
+    offset = offset + 10;
+
+    graph_counts();
+
+  }
+
+
+
+  function toggle_fin(seg, position) {
+
+    // http://dtoal.net/set-fin.php?pos=10&fin=0
+    // onclicks for all fin td to call set-fin
+
+    var newval = $(seg).html();
+
+    if (newval == 0) {
+      newval = 1;
+    } else {
+      newval = 0;
+    }
+
+    $(seg).html(newval);
+
+    $("#debugpane").html("offset " + offset + " and start " + start + " and newval is " + newval + "");
+    $("#locationpane").html("in toggle_fin with " + seg + " as parameter");
+
+    var update_position = start + position;
+
+    var params = "pos=" + update_position + "&fin=" + newval;
+
+    $("#querypane").html("calling set-fin with params " + params);
+
+    $.ajax({
+      url: "set-fin.php",
+      type: "GET",
+      data: params,
+      success: function(data){ do_nothing(data); }
+    });
+
+  }
+
+
+  function do_nothing() {
+
+    return 1;
+
+  }
+ 
+
+</script>
+
+
+</head>
+
+<body>
+
+
+<div id="canvasdiv" style="position: absolute; top: 100; left: 30; width: 1000; height: 500; background-color: #bbbbbb">
+
+  <div style="position: absolute; top: 10; left: 10; width: 980; height: 480; background-color: #888888">
+
+    <canvas id="canvas" width="980" height="480"></canvas>
+
+  </div>
+
+</div>
+
+
+
+<div id="tablediv" style="position: absolute; top: 620; left: 45;">
+
+<table id="output" border=1>
+  <tr id="segrow">
+    <td id="seg0">t</td>
+    <td id="seg1">i</td>
+    <td id="seg2">t</td>
+    <td id="seg3">l</td>
+    <td id="seg4">e</td>
+    <td id="seg5">t</td>
+    <td id="seg6">h</td>
+    <td id="seg7">e</td>
+    <td id="seg8">r</td>
+    <td id="seg9">u</td>
+    <td id="seg10">n</td>
+    <td id="seg11">a</td>
+    <td id="seg12">g</td>
+    <td id="seg13">a</td>
+    <td id="seg14">t</td>
+    <td id="seg15">e</td>
+    <td id="seg16">s</td>
+    <td id="seg17">c</td>
+    <td id="seg18">l</td>
+    <td id="seg19">u</td>
+    <td id="seg20">b</td>
+    <td id="seg21">1</td>
+    <td id="seg22">9</td>
+    <td id="seg23">2</td>
+    <td id="seg24">8</td>
+    <td id="seg25">a</td>
+    <td id="seg26">u</td>
+    <td id="seg27">t</td>
+    <td id="seg28">h</td>
+    <td id="seg29">o</td>
+    <td id="seg30">r</td>
+    <td id="seg31">j</td>
+    <td id="seg32">o</td>
+    <td id="seg33">h</td>
+    <td id="seg34">n</td>
+    <td id="seg35">b</td>
+    <td id="seg36">u</td>
+    <td id="seg37">c</td>
+    <td id="seg38">h</td>
+    <td id="seg39">a</td>
+    <td id="seg40">n</td>
+    <td id="seg41">a</td>
+    <td id="seg42">p</td>
+    <td id="seg43">r</td>
+    <td id="seg44">o</td>
+    <td id="seg45">j</td>
+    <td id="seg46">e</td>
+    <td id="seg47">c</td>
+    <td id="seg48">t</td>
+    <td id="seg49">g</td>
+    <td id="seg50">u</td>
+    <td id="seg51">t</td>
+    <td id="seg52">e</td>
+    <td id="seg53">n</td>
+    <td id="seg54">b</td>
+    <td id="seg55">e</td>
+    <td id="seg56">r</td>
+    <td id="seg57">g</td>
+    <td id="seg58">o</td>
+    <td id="seg59">f</td>
+  </tr>
+  <tr id="finrow">
+    <td id="fin0" onclick="toggle_fin(fin0, 0);">0</td>
+    <td id="fin1" onclick="toggle_fin(fin1, 1);">0</td>
+    <td id="fin2" onclick="toggle_fin(fin2, 2);">0</td>
+    <td id="fin3" onclick="toggle_fin(fin3, 3);">0</td>
+    <td id="fin4" onclick="toggle_fin(fin4, 4);">1</td>
+    <td id="fin5" onclick="toggle_fin(fin5, 5);">0</td>
+    <td id="fin6" onclick="toggle_fin(fin6, 6);">0</td>
+    <td id="fin7" onclick="toggle_fin(fin7, 7);">1</td>
+    <td id="fin8" onclick="toggle_fin(fin8, 8);">0</td>
+    <td id="fin9" onclick="toggle_fin(fin9, 9);">0</td>
+    <td id="fin10" onclick="toggle_fin(fin10, 10);">0</td>
+    <td id="fin11" onclick="toggle_fin(fin11, 11);">0</td>
+    <td id="fin12" onclick="toggle_fin(fin12, 12);">0</td>
+    <td id="fin13" onclick="toggle_fin(fin13, 13);">0</td>
+    <td id="fin14" onclick="toggle_fin(fin14, 14);">0</td>
+    <td id="fin15" onclick="toggle_fin(fin15, 15);">0</td>
+    <td id="fin16" onclick="toggle_fin(fin16, 16);">1</td>
+    <td id="fin17" onclick="toggle_fin(fin17, 17);">0</td>
+    <td id="fin18" onclick="toggle_fin(fin18, 18);">0</td>
+    <td id="fin19" onclick="toggle_fin(fin19, 19);">0</td>
+    <td id="fin20" onclick="toggle_fin(fin20, 20);">1</td>
+    <td id="fin21" onclick="toggle_fin(fin21, 21);">0</td>
+    <td id="fin22" onclick="toggle_fin(fin22, 22);">0</td>
+    <td id="fin23" onclick="toggle_fin(fin23, 23);">0</td>
+    <td id="fin24" onclick="toggle_fin(fin24, 24);">1</td>
+    <td id="fin25" onclick="toggle_fin(fin25, 25);">0</td>
+    <td id="fin26" onclick="toggle_fin(fin26, 26);">0</td>
+    <td id="fin27" onclick="toggle_fin(fin27, 27);">0</td>
+    <td id="fin28" onclick="toggle_fin(fin28, 28);">0</td>
+    <td id="fin29" onclick="toggle_fin(fin29, 29);">0</td>
+    <td id="fin30" onclick="toggle_fin(fin30, 30);">1</td>
+    <td id="fin31" onclick="toggle_fin(fin31, 31);">0</td>
+    <td id="fin32" onclick="toggle_fin(fin32, 32);">0</td>
+    <td id="fin33" onclick="toggle_fin(fin33, 33);">0</td>
+    <td id="fin34" onclick="toggle_fin(fin34, 34);">1</td>
+    <td id="fin35" onclick="toggle_fin(fin35, 35);">0</td>
+    <td id="fin36" onclick="toggle_fin(fin36, 36);">0</td>
+    <td id="fin37" onclick="toggle_fin(fin37, 37);">0</td>
+    <td id="fin38" onclick="toggle_fin(fin38, 38);">0</td>
+    <td id="fin39" onclick="toggle_fin(fin39, 39);">0</td>
+    <td id="fin40" onclick="toggle_fin(fin40, 40);">1</td>
+    <td id="fin41" onclick="toggle_fin(fin41, 41);">1</td>
+    <td id="fin42" onclick="toggle_fin(fin42, 42);">0</td>
+    <td id="fin43" onclick="toggle_fin(fin43, 43);">0</td>
+    <td id="fin44" onclick="toggle_fin(fin44, 44);">0</td>
+    <td id="fin45" onclick="toggle_fin(fin45, 45);">0</td>
+    <td id="fin46" onclick="toggle_fin(fin46, 46);">0</td>
+    <td id="fin47" onclick="toggle_fin(fin47, 47);">0</td>
+    <td id="fin48" onclick="toggle_fin(fin48, 48);">1</td>
+    <td id="fin49" onclick="toggle_fin(fin49, 49);">0</td>
+    <td id="fin50" onclick="toggle_fin(fin50, 50);">0</td>
+    <td id="fin51" onclick="toggle_fin(fin51, 51);">0</td>
+    <td id="fin52" onclick="toggle_fin(fin52, 52);">0</td>
+    <td id="fin53" onclick="toggle_fin(fin53, 53);">0</td>
+    <td id="fin54" onclick="toggle_fin(fin54, 54);">0</td>
+    <td id="fin55" onclick="toggle_fin(fin55, 55);">0</td>
+    <td id="fin56" onclick="toggle_fin(fin56, 56);">0</td>
+    <td id="fin57" onclick="toggle_fin(fin57, 57);">1</td>
+    <td id="fin58" onclick="toggle_fin(fin58, 58);">0</td>
+    <td id="fin59" onclick="toggle_fin(fin59, 59);">1</td>
+  </tr>
+</table>
+
+</div>
+
+
+
+<div id="controls" style="position: absolute; top: 700; left: 80">
+
+  <input type="button" onclick="reset_start_and_offset();" value="reset"      style="width: 100">
+
+  <input type="button" onclick="start_back_10();"          value="back 10"    style="width: 100">
+
+  <input type="button" onclick="start_forward_10();"       value="forward 10" style="width: 100">
+
+  <input type="button" onclick="offset_back_10();"         value="<<"         style="width: 100">
+
+  <input type="button" onclick="offset_back_1();"          value="<"          style="width: 100">
+
+  <input type="button" onclick="offset_forward_1();"       value=">"          style="width: 100">
+
+  <input type="button" onclick="offset_forward_10();"      value=">>"         style="width: 100">
+
+  <input type="button" onclick="update_output();"          value="update"     style="width: 100">
+
+</div>
+
+
+<div id="debugpane"    style="position: absolute; top: 750; left: 80; background-color: #eeeeee">this is the debug pane</div>
+<div id="querypane"    style="position: absolute; top: 780; left: 80; background-color: #eeeeee">this is the query pane</div>
+<div id="locationpane" style="position: absolute; top: 810; left: 80; background-color: #eeeeee">this is the location pane</div>
+
+
+<script type="text/javascript" language="javascript">
+
+  var start = 0;
+  var offset = 0;
+
+  var canvas_width = 980;
+  var canvas_height = 480;
+
+  var canv = document.getElementById("canvas");
+  var c = canvas.getContext("2d");
+
+</script>
+
+
+</body>
+
+</html>
+
+

@@ -1,0 +1,150 @@
+<html><head><title>backup-with-purge.ksh</title></head>
+<pre>
+#!/bin/ksh
+# dave toal 024 2k01
+#
+# this script runs a backup of the $flist filesystems
+#   on the $client machine, doing a ufsdump to the DLT
+#   on $tapehost -- rsh needs to be set up for this.
+# results are sent to $people
+# files older than 2 weeks are deleted from the $purge
+#   directory, if all backups of $flist succeeded
+
+
+client=server1
+tapehost=server2
+
+flist="/oradump /arch /u01"
+
+purge="/tmp"
+
+people="unix"
+# domain is appended for the mail list
+
+
+mail=/tmp/${client}-full.mail
+log=/tmp/${client}-full.log
+
+name=`basename $0`
+subject=/tmp/$name-subject-file
+bstatus=/tmp/$name-backup-status
+badlist=/tmp/$name-failed-list
+bad_backups=""
+
+
+for f in $mail $subject $bstatus $badlist
+do &gt; $f ; done
+
+
+until rsh $tapehost 'mt -f /dev/rmt/0hn status' | grep DLT4000 &gt; /dev/null
+do echo "no tape yet..."
+  sleep 5
+done
+
+starttime=`date`
+
+
+echo "
+
+Filesystems being saved to tape:
+
+$flist
+
+"
+
+echo " #### ## #### ## Level 0 Backup `date \"+%D %T\"` ## #### ## #### " | tee -a $mail | tee -a $log
+
+
+for filesystem in $flist
+do
+
+  request="vxdump u0lf $tapehost:/dev/rmt/0hn $filesystem 2&gt;&1 ; echo EXIT STATUS $filesystem \$?"
+
+  echo " ---- -- -- -- ---- vxdump level 0 $client ---- -- -- -- ---- 
+
+  $request
+  "
+  date &gt;&gt; $log
+
+  ( eval $request ) | grep -v "finished in" 
+
+  sleep 3
+
+  exstat=`tail -1 $mail | nawk '{print $4}'`
+  # or grep "EXIT STATUS $filesystem" $mail | nawk '{print $4}'
+
+  # for each filesystem, report results
+  if [ $exstat -eq 0 ]
+  then
+    echo "
+      Level 0 backup of $filesystem succeeded."
+  else
+    echo "
+      Level 0 backup of $filesystem FAILED."
+    echo "1" &gt; $bstatus
+    bad_backups="`cat $badlist`"
+    bad_backups="$filesystem $bad_backups"
+    echo "$bad_backups" &gt; $badlist
+  fi
+
+  echo ; echo
+
+done 2&gt;&1 | tee -a $mail | tee -a $log
+
+
+echo "Backup began at $starttime and ended at `date`." | tee -a $mail | tee -a $log
+echo "\nThe tape is rewinding..."
+rsh $tapehost mt -f /dev/rmt/0 rewoffl
+echo "done.\n"
+
+
+# status?
+
+if [ -s $bstatus ]
+then 
+ 
+  bad_backups="`cat $badlist`"
+  echo "$client backup FAILED on $bad_backups" &gt; $subject
+ 
+  echo "
+
+  $subject
+  `cat $subject`
+ 
+  Purge of filesystems will NOT be run!
+ 
+  "
+ 
+else
+
+  echo "$client $flist backup done" &gt; $subject
+
+  echo "
+
+  None of the backups of $flist had a problem.
+
+  $0 is deleting these files from $purge now...
+  "
+
+  find $purge -name "*.arc" -mtime +14 -exec ls -l {} \;
+
+  find $purge -name "*.arc" -mtime +14 -exec rm {} \;
+
+
+fi | tee -a $mail | tee -a $log
+
+
+echo "
+  This mail is from $0" &gt;&gt; $mail
+
+mailsubject="`cat $subject`"
+
+for person in $people
+do mailx -s "$mailsubject" $person@employer.com &lt; $mail
+done
+
+exit 0
+
+
+
+</pre><html>

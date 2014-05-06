@@ -1,0 +1,103 @@
+<html>
+<head>
+
+<title>call select-count php from jquery</title>
+
+<script src="jquery.js"></script>
+
+
+<script>
+
+  function runquery() {
+
+    var string = "australia";
+
+    $("#resultpane").html("starting in runquery");
+
+    // $.get("select-count-from-segcount.php", { query: "australia" }, function(data){ showresult(data); } );
+    // in showresult with {"count":"5"}
+    // data is undefined.
+
+    // $.get("test.php", function(data){ $('body').append("Name: " + data.name).append("Time: " + data.time);  }, "json"); 
+
+    // $.get("select-count-from-segcount.php", { query: "australia" }, function(data){ parsexml(data); }, "xml" ); // xml parse?
+
+    // $.get("select-count-from-segcount.php", { query: "australia" }, function(data){ showresult(data); }, "html" );
+    // in showresult with {"count":"5"}
+    // data is undefined.
+
+    // $.get("select-count-from-segcount.php", { query: "australia" }, function(data){ showresult(data); }, "script" ); // nothing
+
+    // $.get("select-count-from-segcount.php", { query: "australia" }, function(data){ showresult(data); }, "json" );  // nothing
+
+    $.get("select-count-from-segcount.php", { query: "australia" }, function(data){ showresult(data); } ); 
+
+
+  };
+
+
+  function showresult(data) {
+
+    $("#resultpane").html("in showresult with " + data + "");
+
+    var string = "data is " + data;
+
+    // var evalstring = "(" + data + ")";
+
+    var evalstring = data;
+    eval(evalstring);
+
+    // var count = 5;
+
+    // data
+
+    // eval("var count = 5;");
+
+    // eval("data");
+
+
+    // eval string is ( var count = 5; )
+
+    $("#datapane").html("string is \"" + string + "\"");
+
+    $("#evalpane").html("eval string is " + evalstring);
+
+    $("#resultpane").html("after eval count is " + count + "");
+
+  };
+
+
+  function parsexml(xml)
+  {
+    $("#resultpane").html("in parsexml with " + xml + "");
+
+    $(xml).find("count").each(function()
+      {
+        $("#datapane").html($(this));
+      });
+
+  };
+
+
+
+</script>
+
+</head>
+
+
+<body>
+
+  <input type="button" value="query australia" onclick="runquery();">
+
+  <div id="resultpane">no query data yet</div>
+
+  <div id="datapane">result of query is</div>
+
+  <div id="evalpane">string for eval</div>
+
+
+</body>
+
+
+</html>
+

@@ -1,0 +1,182 @@
+<html><head><title>uspto-download-hr-files-retry.ksh</title></head>
+<pre>
+#!/bin/ksh
+# dave toal 172 2k01
+# use ncftp to get the uspto files
+#
+
+incoming_dir="/image_stage/pto_images"
+
+list_from_last_run="$incoming_dir/uspto-ftp-last_files_known"
+list_of_current_files_tmp="$incoming_dir/uspto-ftp-current_list_of_files_tmp"
+list_of_current_files="$incoming_dir/uspto-ftp-current_list_of_files"
+list_of_files_to_get="$incoming_dir/uspto-ftp-files_to_get"
+list_from_ftp_tmp="$incoming_dir/uspto-ftp_tmp_list_for_ftp"
+list_from_ftp="$incoming_dir/uspto-ftp_list_for_ftp"
+log="$incoming_dir/uspto-ftp_log"
+
+ftp_good="$incoming_dir/uspto-ftp_flag_file"
+
+uspto_server="www3.uspto.gov"
+
+cd $incoming_dir
+ls -l *.zip | awk '{print $NF}' &gt; $list_from_last_run
+
+
+# mailing list
+people="ops@employer.com, dave.toal@employer.com"
+
+mailfile="$incoming_dir/uspto-ftp_mail_file"
+&gt; $mailfile
+
+ls_ftp_retries=12
+ls_ftp_sleeptime=1800
+
+# this will sleep 30 mins on each loop
+# starting at 1 am, until files are
+# downloaded or retries are finished
+
+# retry until files are found
+# or 6:30 am
+# result &gt; mailfile
+#
+# loop on all files found, ftp get
+# result &gt;&gt; mailfile
+#
+
+ftp_ls_not_done=0
+[ -f $ftp_good ] && rm $ftp_good
+
+while [ $ftp_ls_not_done -lt $ls_ftp_retries ]
+do 
+
+  echo "
+  Starting ftp to $uspto_server at `date`
+  to check for new files..."
+  echo "set passive on
+        cd /daily
+        ls -l " \
+  | ncftp -u user -p password $uspto_server \
+  | grep .zip | awk '{print $NF}' &gt; $list_from_ftp_tmp
+
+  if grep zip $list_from_ftp_tmp &gt; $list_from_ftp
+  then
+    echo "  ftp succeeded."
+
+    # now check if any are new
+
+    diff $list_from_last_run $list_from_ftp \
+    | grep "&gt;" | awk '{print $NF}' &gt; $list_of_files_to_get
+
+
+    if [ -s $list_of_files_to_get ]
+    then
+
+      echo "
+  These files need to be downloaded today
+  "
+      cat $list_of_files_to_get
+
+      ftp_ls_not_done=99
+
+      touch $ftp_good
+
+      echo "
+	Please run the USPTO process for the following files:
+" &gt; $mailfile
+      cat $list_of_files_to_get &gt;&gt; $mailfile
+
+    else
+
+      echo "
+  No new files to be downloaded at `date`
+" | tee $mailfile
+      echo "
+  These files are at uspto:
+  " | tee -a $mailfile
+      cat $list_from_ftp | tee -a $mailfile
+
+      echo "
+  These files are already downloaded in $incoming_dir:
+  " | tee -a $mailfile
+      cat $list_from_last_run | tee -a $mailfile
+
+    fi
+
+
+  else
+
+    echo "
+  ftp failed to connect to $uspto_server at `date`" | tee -a $mailfile
+
+  fi
+
+  if [ ! -f $ftp_good ]
+  then
+
+    ftp_ls_not_done=`expr $ftp_ls_not_done + 1`
+
+    if [ $ftp_ls_not_done -lt $ls_ftp_retries ]
+    then
+      echo "
+  Sleeping $ls_ftp_sleeptime before checking again...
+  "
+      sleep $ls_ftp_sleeptime
+    fi
+
+  fi
+
+done
+
+
+
+if [ -f $ftp_good ]
+then
+
+  for f in `cat $list_of_files_to_get`
+  do
+
+    echo "
+  Getting $f...
+  "
+
+    download_string="lcd $incoming_dir
+      set passive on
+      cd /daily
+      get $f
+      bye"
+
+    echo "$download_string" | ncftp -u user -p password $uspto_server
+
+    sleep 3
+
+    echo
+
+  done
+
+  echo "
+
+This mail is from $0
+  " | tee -a $mailfile
+
+  mailx -s "USPTO download is done" $people &lt; $mailfile
+
+else
+
+  echo "
+	No files were downloaded from USPTO today.
+
+This mail is from $0
+  " | tee -a $mailfile
+
+
+  mailx -s "No files downloaded from USPTO" $people &lt; $mailfile
+
+fi
+
+echo
+
+exit 0
+
+
+</pre><html>

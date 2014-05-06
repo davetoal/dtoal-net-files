@@ -1,0 +1,388 @@
+#!/usr/bin/perl
+
+# dave toal
+
+# draw function call graph of javascript
+
+# output is .js with c.arc and c.fill etc calls on canvas c
+
+
+# grep ^function and build hash of function names
+# read it again, list function calls in each function
+# grep function $name, grep $name, and grep ^}
+
+# start drawing from $init function
+
+# figure out how large the graph is before drawing it?
+
+# nested functions???
+
+
+# depth first drawing, 
+#  finish all of the first calls, 
+#  get the lowest page position,
+#  drop below that for the second call
+
+# or, a tree going upward,
+#  list of different branch lengths for each function in the function
+#  shortest to longest,
+#  at spread of n angles from left to right
+
+# create linked tree of objects and iterate on gravity = -1 * distance
+
+
+use strict;
+
+
+
+my $file = "/home/dave/javascript/tabeeb.js";
+
+open(F, "< $file");
+
+
+
+
+my $js_file = "function-calls.js";
+
+`cat canvas-header.txt > function-calls.js`;
+
+open(O, ">> $js_file");
+
+
+
+
+# get function names
+
+my %f;
+
+
+while (my $line = <F>) {
+
+  if ($line =~ /^function/) {
+
+    my $fbit = (split(/\s/, $line))[1];
+    my $name = (split(/\(/, $fbit))[0];
+
+    $f{$name}++;
+
+  }
+
+}
+
+close(F);
+
+
+
+# read the file again, list the functions in each function
+
+
+my %l;
+
+my $current_f;
+
+
+open(F, "< $file");
+
+while (my $line = <F>) {
+
+  next if ($line =~ /^\s*\/\//);
+  next if ($line =~ /^\s*$/);
+
+  if ($line =~ /^function/) {
+
+    my $fbit = (split(/\s/, $line))[1];
+    my $name = (split(/\(/, $fbit))[0];
+
+    # print "#### name is $name\n";
+
+    $current_f = $name
+
+  } else {
+
+    for my $f_name (keys %f) {
+
+      if ($line =~ / $f_name\(/) {
+
+        print "#### function call to $f_name in $current_f\n";
+        # print "$line\n";
+ 
+        push( @{ $l{$current_f} }, $f_name );
+
+      }
+
+    }
+
+
+  }
+
+
+}
+
+close(F);
+
+
+print "starting recursive list of functions\n\n";
+
+
+
+# list_functions();
+
+# list_function_lists();
+
+# sort alphabetically into a file
+
+
+
+# start at init_page
+# list functions in init_page
+# recursive list of functions, global max_y val
+
+
+my $max_y;
+my $max_x;
+
+my @positions;
+# if anyone else has used the position, move down
+
+
+my $parent_x = 50;
+my $parent_y = 100;
+
+# draw something to mark start of program, start drawing first function to the right of that
+
+my $label = "tabeeb.js";
+my $label_x = $parent_x - 30;
+my $label_y = $parent_y - 20;
+
+print O "  c.fillStyle = \"rgba(0, 0, 0, 1)\";\n";
+print O "  c.font = \"12pt sans-serif\";\n";
+print O "  c.fillText(\"$label\", $label_x, $label_y);\n";
+print O "\n";
+
+
+
+my $my_x = $parent_x + 100;
+my $my_y = $parent_y;
+
+
+# i draw my own circle, and then start each child with a position based on my own
+# first child is to the right and down
+# rest of children are under it
+
+
+# max_y is set every time
+# if last y in the loop is < max_y, last y = max_y
+
+
+# stop drawing if the graph loops
+my $seen_list = [];
+
+
+# recursion level
+my $level = 0;
+
+
+my $start = "init_page";
+
+
+push(@{$seen_list}, $start);
+
+draw_functions($start, $my_x, $my_y, $parent_x, $parent_y, $seen_list, 0);
+
+
+
+print O "}\n\n";
+
+close(O);
+
+
+
+
+sub draw_functions() {
+
+  my ($name, $my_x, $my_y, $parent_x, $parent_y, $seen_list, $level) = @_;
+
+  # print "draw functions, $name, $my_x, $my_y, $level\n";
+
+  # draw line back to parent x, parent y
+  # draw circle at my x, my y
+  # draw functions in the function,
+  #   first one is to the right and down
+  #   rest are under that
+  #     arc of positions?  tree?
+  #   set max_y
+  #   pass my x, my y as parent x, parent y
+
+
+  $level++;
+  my $s = "  " x $level;
+  print $s . "draw $name at $my_x, $my_y\n";
+
+
+  # draw line back to $parent_x, $parent_y
+  draw_line($my_x, $my_y, $parent_x, $parent_y);
+
+
+  # draw a ball for $name at $my_x, $my_y
+  my $radius = 10;
+  draw_ball($my_x, $my_y, $radius);
+
+
+  # put name to the right of the ball
+  my ($name_x, $name_y);
+  $name_x = $my_x + 25;
+  $name_y = $my_y;
+  draw_name($name, $name_x, $name_y);
+
+
+  # record my position
+  push(@positions, [ $my_x, $my_y ]);
+
+
+  # draw all functions in $name
+  
+  my $start_x = $my_x + 150;
+  my $start_y = $my_y + 50;
+
+  my $f_count = 0;
+
+
+  for my $f_name ( @{ $l{$name} } ) {
+
+    # recursion,
+
+    next if ($f_name eq $name);
+
+
+    # next if f name has already been encountered
+    # no loops in the graph
+
+    my $already_seen = 0;
+    for my $s (@{$seen_list}) { $already_seen = 1 if ($f_name eq $s); }
+    next if ($already_seen);
+
+    # draw something that means looped back to x, and next
+
+
+
+    # start to the right and down, others under that
+
+    my $f_x = $start_x;
+    my $f_y = $start_y + ( $f_count * 50 );
+
+    $f_y = ($max_y + 100) if ( $f_y <= $max_y );
+
+    $max_y = $f_y if ( $f_y > $max_y );
+
+
+    # check positions, move down if someone is already here
+
+    for my $p (@positions) {
+      if ( ( $p->[0] == $f_x ) and ( $p->[1] == $f_y ) ) { 
+        $f_y += 100; 
+        $max_y = $f_y;
+      }
+    }
+
+
+    # make a copy of the list of functions seen, and pass it to all the next recursions
+
+    my $list = [];
+
+    for my $s (@{$seen_list}) { push(@{$list}, $s); }
+
+    push(@{$list}, $f_name);
+
+
+    draw_functions($f_name, $f_x, $f_y, $my_x, $my_y, $list, $level);
+
+    $f_count++;
+
+  }
+
+
+
+}
+
+
+
+sub draw_ball() {
+
+  my ($x, $y, $radius) = @_;
+
+  print O "  c.fillStyle = \"rgba(200, 200, 255, 1)\";\n";
+  print O "  c.strokeStyle = \"rgba(100, 100, 155, 1)\";\n";
+  print O "  c.beginPath();\n";
+  print O "  c.arc($x, $y, $radius, 0, Math.PI*2, true);\n";
+  print O "  c.closePath();\n";
+  print O "  c.fill();\n";
+  print O "  c.stroke();\n";
+  print O "\n";
+
+}
+
+
+sub draw_line() {
+
+  my ($x, $y, $i, $j) = @_;
+
+  print O "  c.strokeStyle = \"rgba(100, 100, 100, 1)\";\n";
+  print O "  c.beginPath();\n";
+  print O "  c.moveTo($x, $y);\n";
+  print O "  c.lineTo($i, $j);\n";
+  print O "  c.stroke();\n";
+  print O "\n";
+
+}
+
+
+sub draw_name() {
+
+  my ($name, $x, $y) = @_;
+
+  # context.textAlign and context.textBaseline
+
+  print O "  c.fillStyle = \"rgba(0, 0, 0, 1)\";\n";
+  print O "  c.font = \"12pt sans-serif\";\n";
+  print O "  c.fillText(\"$name\", $x, $y);\n";
+  print O "\n";
+
+}
+
+
+
+
+
+sub list_functions() {
+
+  for my $k (keys %f) {
+
+    print "$k\n";
+
+  }
+
+}
+
+
+
+
+sub list_function_lists() {
+
+  for my $k (keys %l) {
+
+    print "$k\n";
+
+    for my $f ( @{ $l{$k} } ) {
+
+      print "  $f\n";
+
+    }
+
+    print "\n";
+
+  }
+
+}
+
+
+

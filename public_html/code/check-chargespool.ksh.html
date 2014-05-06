@@ -1,0 +1,124 @@
+<html><head><title>check-chargespool.ksh</title></head>
+<pre>
+#!/bin/ksh
+# dave toal 224 2k01
+# check chargespool
+# check if counts drop if &gt; 2000
+# check if proxies running
+# mail saegis problems
+#
+
+mailfile=/tmp/check-chargespool-mail
+
+limit=2000
+
+dir1=/mnt/spool/javachargespool
+dir2=/mnt/spool/javachargearchive
+dir3=/mnt/spool/chargespool 
+
+
+people="saegis_problems@employer.com"
+
+sleeptime=`expr 60 \* 60 \* 2`
+# sleeptime=20
+
+wait=2
+waittime=`expr 60 \* $wait`
+
+
+p1="argusdbproxyd"
+prox1="/bin/perl /export/argus/www/bin/$p1"
+
+p2="run_eventdbproxyd"
+prox2="/bin/sh $p2"
+
+p3="run_archiveproxyd"
+prox3="/bin/sh $p3"
+
+
+while true
+do
+
+  d1=`ls -l $dir1 | wc -l | awk '{print $1}'`
+  d2=`ls -l $dir2 | wc -l | awk '{print $1}'`
+  d3=`ls -l $dir3 | wc -l | awk '{print $1}'`
+
+  tot1=`expr $d1 + $d2 + $d3`
+
+  echo "first total is $tot1"
+
+  if [ $tot1 -gt $limit ]
+  then
+
+    # are counts dropping?
+    # are proxies running?
+
+    sleep $waittime
+
+    d1=`ls -l $dir1 | wc -l | awk '{print $1}'`
+    d2=`ls -l $dir2 | wc -l | awk '{print $1}'`
+    d3=`ls -l $dir3 | wc -l | awk '{print $1}'`
+ 
+    tot2=`expr $d1 + $d2 + $d3`
+
+    echo "second total is $tot2"
+
+    if [ $tot2 -lt $tot1 ]
+    then
+
+      echo "
+
+	Two minutes ago, the total count was $tot1,
+so charges appear to be processing.  Currently
+there are:
+" &gt; $mailfile
+
+    else
+
+      echo "
+
+	Charges have not processed in the past $wait
+minutes.
+" &gt; $mailfile
+
+    fi
+
+    echo "	$d1 in $dir1
+        $d2 in $dir2
+        $d3 in $dir3
+" &gt;&gt; $mailfile
+
+
+    if ps -ef | grep -v grep | grep "$prox1" &gt; /dev/null
+    then echo "	$p1 is running"
+    else echo "	$p1 is NOT running"
+    fi &gt;&gt; $mailfile
+
+    if ps -ef | grep -v grep | grep "$prox2" &gt; /dev/null
+    then echo "	$p2 is running"
+    else echo "	$p2 is NOT running"
+    fi &gt;&gt; $mailfile 
+
+    if ps -ef | grep -v grep | grep "$prox3" &gt; /dev/null
+    then echo "	$p3 is running"
+    else echo "	$p3 is NOT running"
+    fi &gt;&gt; $mailfile 
+
+
+    echo "
+
+	This mail is from $0
+" &gt;&gt; $mailfile
+
+    mailx -s "admin charge spool problem, total is $tot2" \
+      $people &lt; $mailfile
+
+  fi
+
+  sleep $sleeptime
+
+done
+
+
+
+</pre><html>

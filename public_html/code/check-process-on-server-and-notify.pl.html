@@ -1,0 +1,245 @@
+<html><head><title>check-process-on-server-and-notify.pl</title></head>
+<pre>
+
+
+# dave toal
+
+
+use strict;
+
+# use Win32::OLE;
+
+use lib 'r:\Resource\GPD\Std\ver1.2';
+use CdsSmtp;
+
+
+my %p = (
+
+          'server1'      =&gt; { 'CCS Job Manager.exe' =&gt; 'JM' },
+
+          'server2'      =&gt; { 'CCS Job Manager.exe' =&gt; 'JM' },
+
+          'server3'      =&gt; { 'CCS Job Manager.exe' =&gt; 'JM' },
+          
+          'server4'      =&gt; { 'CCS Job Manager.exe' =&gt; 'JM' },
+
+          'server5'      =&gt; { 'CCS Job Manager.exe' =&gt; 'JM' },
+
+          'server6'      =&gt; { 'CCS Job Manager.exe' =&gt; 'JM',
+                                 'CCI_Consumer.exe'    =&gt; 'CCI Consumer' },
+
+          'server7'      =&gt; { 'CCS Job Manager.exe' =&gt; 'JM' },
+
+          'serveru1'     =&gt; { 'perl.exe'            =&gt; 'Group1 wait-and-run.pl' },
+
+          'serverfp1'    =&gt; { 'System' =&gt; 'null task while Bansley is using the box' },
+
+          'server12'     =&gt; { 'CCS Job Manager.exe' =&gt; 'JM for Edison print' },
+
+          'serverw4'     =&gt; { 'CCS Job Manager.exe' =&gt; 'JM for Burr Ridge print' },
+
+);
+
+
+
+for my $server (keys %p) {
+  print "server $server\n";
+  for my $process (keys %{$p{$server}}) {
+    my $info = $p{$server}-&gt;{$process};
+    print "process $process, $info\n";
+  }
+}
+
+
+
+my $subject = "process not running";
+
+my @failed;
+
+for my $server (keys %p) {
+
+  print "checking server $server\n";
+
+  my @list = `tasklist /s $server`;
+
+  my @result;
+  for (@list) {
+    chomp();
+    push(@result, $_);
+  }
+
+  my $problem = 0;
+
+  for my $process (keys %{$p{$server}}) {
+
+    my @pids = grep(/$process/, @list);
+
+    if (@pids) {
+      print "$process is running on $server\n";
+    } else {
+      print "$process not running\n";
+      my $info = $p{$server}-&gt;{$process};
+      $subject .= ", $info";
+      if ($server =~ /server12/) {
+        push(@failed, "", "  $process is not running on $server, use support2 login instead,");
+      } else {
+        push(@failed, "", "  $process is not running on $server, login is support,");
+      }
+      $problem = 1;
+    }
+
+  }
+
+  if ($problem) {
+    $subject .= " on $server";
+    push(@failed, "", @result);
+  }
+
+}
+
+
+if (@failed) {
+
+  my @text;
+  push(@text, "  Please check that the box is logged in and processes are started,");
+  push(@text, @failed, "");
+  send_mail(\@text, $subject);
+
+}
+
+
+
+sub timestamp {
+
+  my ($second, $minute, $hour, $dayOfMonth, $month,
+      $yearOffset, $dayOfWeek, $dayOfYear, $daylightSavings) = localtime();
+
+  $second = "0" . $second if ($second &lt; 10);
+  $minute = "0" . $minute if ($minute &lt; 10);
+  $hour   = "0" . $hour   if ($hour &lt; 10);
+
+  $month++;
+  my $year = 2000 + ( $yearOffset - 100 );
+  my $date = "${month}_${dayOfMonth}_${year}";
+
+  my $dt = "$date" . "-" . "$hour:$minute:$second";
+
+  return $dt;
+
+}
+
+
+
+sub send_mail {
+
+  my $body = shift;
+
+  my $subject = shift;
+
+  my $hname = `hostname`;
+  chomp($hname);
+  my $hostname = lc($hname);
+
+  my $scriptname = $0;
+
+  my %send = (
+    from           =&gt;   $hostname,
+    fromdispname   =&gt;   $hostname,
+    to             =&gt; [ "Support\@employer.com", "#EmergencySupport\@employer.com" ],
+    recipients     =&gt; [ "#Support", "#Emergency Support" ],
+    subject        =&gt;   "$subject",
+    body           =&gt; [ "", "", @{$body},
+                        "", "this mail is from $scriptname", "" ]
+    );
+
+  my $ret = CdsSmtp::SendMail(\%send);
+
+  print "return value of mail is $ret\n";
+
+}
+
+
+
+sub get_info {
+
+  my ($query, $connection, $field) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    push(@list, $rs-&gt;Fields($field)-&gt;{'value'} );
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub get_info_hash {
+
+  my ($query, $connection, $fields) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    my %row;
+    for my $field (@{$fields}) {
+      $row{$field} = $rs-&gt;Fields($field)-&gt;{'value'};
+    } 
+    push(@list, \%row);
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub get_db_handle {
+
+  my $server = 'server\CDS';
+
+  my $database = 'Database';
+  my $user     = 'user';
+  my $passwd   = 'password';
+
+  my $dsn = "Provider=SQLOLEDB.1;Password=$passwd;Persist Security Info=False;";
+  $dsn   .= "User ID=$user;Initial Catalog=$database;Data Source=$server;";
+
+  my $connection = Win32::OLE-&gt;new('ADODB.Connection') or die "Cannot get new connection: $!";
+
+  $connection-&gt;Open($dsn);
+
+  return $connection;
+
+}
+
+
+
+sub executeQuery {
+
+  my $query = shift;
+  my $connection = shift;
+
+  my $record_set = Win32::OLE-&gt;new('ADODB.Recordset');
+
+  $record_set = $connection-&gt;Execute($query);
+
+  if(! $record_set ) {
+    print     "error: " . Win32::OLE-&gt;LastError();
+    print LOG "error: " . Win32::OLE-&gt;LastError();
+  }
+
+  return $record_set;
+
+}
+
+
+</pre><html>

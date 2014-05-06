@@ -1,0 +1,82 @@
+<html><head><title>chain-mail.pl</title></head>
+<pre>
+
+
+# dave toal
+
+
+use strict;
+
+use Torus;
+
+
+my $file = "torus-points-oo.pov";
+
+`cat header.pov &gt; $file`;
+
+
+my $t = Torus-&gt;new(200, 30, 10, $file);
+
+$t-&gt;init;
+
+$t-&gt;tilt(0, 0, -45);
+
+my $column_spacing = 200;
+my $row_spacing = 470;
+
+my $columns = 20;
+my $rows    = 6;
+
+
+for (my $j = 0; $j &lt; $rows; $j++) {
+
+  for (my $i = 0; $i &lt; $columns; $i++) {
+
+    $t-&gt;print;
+
+    $t-&gt;move($column_spacing, 0, 0);
+
+  }
+
+  my $distance = $columns * $column_spacing * -1;
+
+  $t-&gt;move($distance, 0, 0);
+
+  $t-&gt;move(0, 0, $row_spacing);
+
+}
+
+
+
+my $s = Torus-&gt;new(200, 30, 10, $file);
+
+$s-&gt;init;
+
+$s-&gt;tilt(0, 0, 45);
+
+$s-&gt;move($column_spacing / 2 + 15, 0, $row_spacing / 2);
+$s-&gt;print;
+
+
+for (my $j = 0; $j &lt; $rows; $j++) {
+
+  for (my $i = 0; $i &lt; $columns; $i++) {
+
+    $s-&gt;print;
+
+    $s-&gt;move($column_spacing, 0, 0);
+
+  }
+
+  my $distance = $columns * $column_spacing * -1;
+
+  $s-&gt;move($distance, 0, 0);
+
+  $s-&gt;move(0, 0, $row_spacing);
+
+}
+
+
+
+
+</pre><html>

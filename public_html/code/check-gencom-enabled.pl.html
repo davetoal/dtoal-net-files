@@ -1,0 +1,236 @@
+<html><head><title>check-gencom-enabled.pl</title></head>
+<pre>
+
+
+# dave toal
+
+# encompass gencom entries are being set up but not enabled
+# which causes the run to fail
+# check all filenames in dir, notify br ta also
+
+
+use strict;
+
+use Win32::OLE;
+
+use lib 'r:\Resource\GPD\Std\ver1.2';
+use CdsSmtp;
+
+
+
+my @dir_list = qw(
+
+  R:\Production\ftp\CDSEXP\Ta
+  R:\Production\ftp\CDSEXP\Espp
+
+);
+
+
+my $dbh = get_db_handle();
+
+
+my (@fail, @mail);
+
+
+for my $dir (@dir_list) {
+  print "  $dir\n";
+  check_enabled($dir);
+}
+
+
+if (@fail) {
+
+  push(@mail, "  These are not enabled for gencom, the run might fail on one or more of them, ");
+
+  @mail = (@mail, @fail);
+
+  push(@mail, "");
+
+  my $subject = "cdsexp gencom not enabled";
+
+  send_mail(\@mail, $subject);
+
+}
+
+
+
+sub check_enabled {
+
+  my $dir = shift;
+
+  my $classtype = (split(/\\/, $dir))[-1];
+
+  chdir($dir);
+
+  my @files = &lt;CDSEXP_*.tpe&gt;;
+
+  for my $file (@files) {
+
+    print "  checking $file\n";
+
+    my ($cds, $id, $type, $stuff) = (split(/_/, $file));
+
+    $id = $id . '_' . $type if ($type =~ m/^(HIS|DSB|ROR|GOL|MTG)/i);
+
+    if (enabled($id, $classtype)) {
+      print "  $id is enabled\n";
+    } else {
+      print "  $id is not enabled, notifying\n";
+      push(@fail, "", "  $dir\\$file, $id not enabled");
+    }
+
+  }
+
+}
+
+
+
+sub enabled {
+
+  my $id = shift;
+  my $type = shift;
+
+  print "  query $id for $type\n";
+
+  my $field = "Is_Enabled";
+
+  my $query  = "select pd.Is_Enabled from dbo.Product_Details pd inner join";
+     $query .= " dbo.Products p ON p.Product_Id = pd.Product_Id inner join";
+     $query .= " dbo.Classes c ON c.Class_Id = p.Class_Id where";
+
+     if ($type eq "Ta") {
+       $query .= " (c.Class_Name like '*" . $id . "*')";
+     } else {
+       $query .= " (c.Class_Name like '" . $id . "')";
+     }
+
+     $query .= " and (p.Product_Name like 'gen%com%')";
+
+  my $r = get_info($query, $dbh, $field);
+
+  my $result = 0;
+
+  for my $mode_status (@$r) {
+    $result = 1 if ($mode_status);
+    print "  got $mode_status for $id\n";
+  }
+
+  return $result;
+
+}
+
+
+
+sub send_mail {
+
+  my $body = shift;
+
+  my $subject = shift;
+
+  my $hname = `hostname`;
+  chomp($hname);
+  my $hostname = lc($hname);
+
+  my $scriptname = $0;
+
+  my %send = (
+    from           =&gt;   $hostname,
+    fromdispname   =&gt;   $hostname,
+    to             =&gt; [ "Support\@employer.com", "#EmergencySupport\@employer.com" ],
+    recipients     =&gt; [ "#Support", "#Emergency Support" ],
+    subject        =&gt;   "$subject",
+    body           =&gt; [ "", "", @{$body},
+                        "", "this mail is from $scriptname", "" ]
+    );
+
+  my $ret = CdsSmtp::SendMail(\%send);
+
+  print "return value of mail is $ret\n";
+
+}
+
+
+
+sub get_info {
+
+  my ($query, $connection, $field) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    push(@list, $rs-&gt;Fields($field)-&gt;{'value'} );
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub get_info_hash {
+
+  my ($query, $connection, $fields) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    my %row;
+    for my $field (@{$fields}) {
+      $row{$field} = $rs-&gt;Fields($field)-&gt;{'value'};
+    } 
+    push(@list, \%row);
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub get_db_handle {
+
+  my $server = 'server\CDS';
+
+  my $database = 'database';
+  my $user     = 'user';
+  my $passwd   = 'password';
+
+  my $dsn = "Provider=SQLOLEDB.1;Password=$passwd;Persist Security Info=False;";
+  $dsn   .= "User ID=$user;Initial Catalog=$database;Data Source=$server;";
+
+  my $connection = Win32::OLE-&gt;new('ADODB.Connection') or die "Cannot get new connection: $!";
+
+  $connection-&gt;Open($dsn);
+
+  return $connection;
+
+}
+
+
+
+sub executeQuery {
+
+  my $query = shift;
+  my $connection = shift;
+
+  my $record_set = Win32::OLE-&gt;new('ADODB.Recordset');
+
+  $record_set = $connection-&gt;Execute($query);
+
+  if(! $record_set ) {
+    print     "error: " . Win32::OLE-&gt;LastError();
+    print LOG "error: " . Win32::OLE-&gt;LastError();
+  }
+
+  return $record_set;
+
+}
+
+
+</pre><html>

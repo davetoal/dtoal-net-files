@@ -1,0 +1,143 @@
+<html><head><title>check-print-disk-full-and-notify.pl</title></head>
+<pre>
+
+
+# dave toal
+# notify if &lt; 10 gig on /r drive
+# write to log also and graph
+
+
+use strict;
+
+use lib 'r:\Resource\GPD\Std\ver1.2';
+use CdsSmtp;
+
+my @mailbody;
+
+my $minsize = 5;
+my $min = 1024 * 1024 * 1024 * $minsize;
+
+my $logdir = 'R:\ScheduledHousekeeping\tmp';
+
+
+my %disklist = ( 
+                  '\\\server1\cds'                    =&gt;  'edison-print-disk-space.log',
+                  '\\\server2\Resource\Printpath'     =&gt;  'burr-ridge-print-disk-space.log',
+                  '\\\server3\resource\contracts'     =&gt;  'production-r-drive-disk-space.log',
+                  '\\\server4\Workgrp\SHARSV'         =&gt;  'proofs-dir-disk-space.log',
+                  '\\\server5\Workgrp'                =&gt;  'njeffp2-proofs-disk-space.log',
+                  '\\\server6\general'                =&gt;  'torbfp1-proofs-disk-space.log',
+);
+
+
+
+# my @disklist = ( 'R:\\' );
+# my $log = 'R:\ScheduledHousekeeping\tmp\disk-space.log';
+
+my $subject;
+
+
+for my $disk (keys(%disklist)) {
+
+  print "checking $disk\n";
+
+  my @dirlist = `dir $disk`;
+
+  next unless (@dirlist);
+  # because disk read fails
+
+  my $sizeline = $dirlist[-1];
+
+  my $free = (split(/\s+/, $sizeline))[3];
+  $free =~ s/,//g;
+
+  next unless ($free =~ /\d+/);
+  # because disk read fails and returns some error string 
+
+  my $dt = timestamp();
+  my $logline = "$disk  $dt  $free";
+  print "$logline\n";
+
+  my $log = $logdir . '\\' . $disklist{$disk};
+
+  open(LOG, "&gt;&gt; $log");
+  print LOG "$logline\n";
+  close(LOG);
+
+  # next if ($disk =~ /Fp1/);
+  # because it's the weekend
+
+  if ($free &lt; $min) {
+
+    push(@mailbody, "  Free space on $disk is less than $minsize gig");
+    push(@mailbody, "");
+    push(@mailbody, $logline);
+    push(@mailbody, "");
+    push(@mailbody, $sizeline);
+
+    my $escdisk = $disk;
+    $escdisk =~ s/\\/ /g;
+    $subject = "disk space warning on $escdisk";
+
+  }
+
+}
+
+
+
+send_mail(\@mailbody, $subject) if (@mailbody);
+
+
+
+sub timestamp {
+
+  my ($second, $minute, $hour, $dayOfMonth, $month,
+      $yearOffset, $dayOfWeek, $dayOfYear, $daylightSavings) = localtime();
+
+  $second = "0" . $second if ($second &lt; 10);
+  $minute = "0" . $minute if ($minute &lt; 10);
+  $hour   = "0" . $hour   if ($hour &lt; 10);
+
+  $month++;
+  my $year = 2000 + ( $yearOffset - 100 );
+  my $date = "${month}_${dayOfMonth}_${year}";
+
+  my $dt = "$date" . "-" . "$hour:$minute:$second";
+
+  return $dt;
+
+}
+
+
+
+sub send_mail {
+
+  my $body = shift;
+
+  my $subject = shift;
+
+  my $hname = `hostname`;
+  chomp($hname);
+  my $hostname = lc($hname);
+
+
+  my $scriptname = $0;
+
+  my %send = (
+    from           =&gt;   $hostname,
+    fromdispname   =&gt;   $hostname,
+    to             =&gt; [ "Support\@employer.com", "EmergencySupport\@employer.com" ],
+    recipients     =&gt; [ "#Support", "#Emergency Support" ],
+    subject        =&gt;   "$subject",
+    body           =&gt; [ "", "", @{$body},
+                        "", "", "this mail is from $scriptname", "" ]
+    );
+
+  my $ret = CdsSmtp::SendMail(\%send);
+
+  print "return value of mail is $ret\n";
+
+}
+
+
+</pre><html>

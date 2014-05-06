@@ -1,0 +1,135 @@
+<html><head><title>split-cdsexp-by-account.pl</title></head>
+<pre>
+
+
+# dave toal
+# remove listed accounts from cdsexp file
+
+
+use strict;
+
+
+# get accounts from list
+
+my %a;
+
+my $list = "2-cgp-list-of-accounts-for-pulls.txt";
+open(L, "&lt; $list");
+while(my $n = &lt;L&gt;) { chomp $n; $a{$n} = $n; }
+close(L);
+
+
+my $filebase = "CDSEXP_CGP_0707";
+my $infile   = "../Datafiles/$filebase.TPE";
+
+my $outfile = $filebase . "_OUT.tpe";
+my $badfile = $filebase . "_BAD.tpe";
+
+
+open(IN, "&lt; $infile");
+
+my $header;
+$header .= &lt;IN&gt;;
+
+my @set;
+my (%known, %doms, %listed);
+my ($thisacc, $nextacc, $thisdom, $nextdom);
+
+
+while (my $line = &lt;IN&gt;) {
+
+  my $rec = substr($line, 0, 8);
+
+  if ($rec =~ /10000000/) {
+
+    $nextacc = substr($line, 8, 11);
+    $nextdom = substr($line, 853, 3);
+
+    # print "nextacc $nextacc nextdom $nextdom\n";
+
+    if ($thisdom) {
+      # print "dom already set, $thisdom\n";
+      1;
+    } else {
+      # print "first account, dom is $nextdom\n";
+      $thisdom = $nextdom;
+    }
+    # this sets the right output on the first account header that's read
+
+    if ($thisacc) {
+      # print "account already set, $thisacc\n";
+      1;
+    } else {
+      # print "first account, account is $nextacc\n";
+      $thisacc = $nextacc;
+    }
+
+  }
+
+
+  if (  ( ($rec =~ /10000000/)
+       or ($rec =~ /99000000/) )
+    and (@set)  ) {
+
+    if (exists $a{$thisacc}) { 
+      # print "  write set for email account $thisacc, $thisdom\n";
+      write_save_set("BAD", \@set); 
+    } else {
+      write_save_set("OUT", \@set); 
+    }
+
+
+    # clear @set again
+    @set = ();
+
+    # for next set to be written
+    $thisdom = $nextdom;
+    $thisacc = $nextacc;
+
+  }
+
+  push(@set, $line);
+
+}
+
+# for my $dom (keys %doms) { write_save_set($dom); }
+# write trailers to dom and frgn
+write_save_set("OUT", \@set);
+write_save_set("BAD", \@set);
+
+
+sub write_save_set {
+
+  my $dom = shift;
+  my $set = shift;
+
+  my $file;
+  if ($dom =~ /BAD/) { $file = $badfile; }
+                else { $file = $outfile; }
+
+  # print "  write set to $file\n";
+  write_file_header($file) unless ($listed{$file});
+
+  open(D, "&gt;&gt; $file");
+  for my $line (@$set) { print D "$line"; }
+  close(D);
+
+}
+
+
+
+sub write_file_header {
+
+  my $file = shift;
+
+  open(F, "&gt; $file");
+  print F "$header";
+  close(F);
+
+  $listed{$file}++;
+
+}
+
+
+
+</pre><html>

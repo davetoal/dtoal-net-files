@@ -1,0 +1,219 @@
+<html><head><title>check-for-zero-sets-queued.pl</title></head>
+<pre>
+
+
+# dave toal
+
+# if any rows from run in job tracking in the past 1/2 hour
+#   notify if any with no sets queued
+# run every 10 minutes, so one alert mail and 2 saying set deleted
+
+
+use strict;
+
+use Win32::OLE;
+
+use lib 'r:\Resource\GPD\Std\ver1.2';
+use CdsSmtp;
+
+my ($subject, @mail);
+
+
+use lib "./lib";
+use Date::Parse;
+
+
+my $now = timestamp();
+
+my $query = "select dateadd(minute, -30, '$now') as start";
+
+my $dbh = get_db_handle();
+my $s = get_info($query, $dbh, "start");
+$dbh-&gt;Close();
+
+my $start = $s-&gt;[0];
+
+
+print "query range from $start to $now\n";
+push(@mail, "", "  query range from $start to $now", "", "");
+
+my @fields = qw( Job_Index Job_Number Run_Number Job_Name Client Total_Sets Total_Images
+                 Dispatch_To Date_Time Work_Order_Number Region Version Print_File Stock
+                 Print_Status Simplex Duplex Pages );
+
+my $f = join(", ", @fields);
+
+my $query = "select $f from job_tracking where date_time &gt; '$start' and date_time &lt; '$now'";
+  $query .= " and total_sets = 0";
+
+my $dbh = get_db_handle();
+my $l = get_info_list($query, $dbh, \@fields);
+$dbh-&gt;Close();
+
+
+if (@$l) {
+
+  $subject = "print run with zero sets queued";
+
+  push (@mail, "  Rows queued to BR with zero volume have to be deleted manually from job tracking.", "");
+
+  for my $r (@$l) {
+
+    $subject .= ", $r-&gt;{'Job_Number'} $r-&gt;{'Run_Number'}";
+
+    for my $f (@fields) {
+      print "$f: $r-&gt;{$f}\n";
+      push(@mail, "$f: $r-&gt;{$f}");
+    }
+
+    print "\n";
+    push(@mail, "");
+
+  }
+
+  print "$subject\n";
+
+} else { 
+
+  print "no runs with zero sets found\n"; 
+
+}
+
+send_mail(\@mail, $subject) if ($subject);
+
+
+
+sub timestamp {
+
+  my ($second, $minute, $hour, $dayOfMonth, $month,
+      $yearOffset, $dayOfWeek, $dayOfYear, $daylightSavings) = localtime();
+
+  $second = "0" . $second if ($second &lt; 10);
+  $minute = "0" . $minute if ($minute &lt; 10);
+  $hour   = "0" . $hour   if ($hour &lt; 10);
+
+  $month++;
+  my $year = 2000 + ( $yearOffset - 100 );
+  my $date = "${month}/${dayOfMonth}/${year}";
+
+  my $dt = "$date $hour:$minute:$second";
+
+  return $dt;
+
+}
+
+
+
+sub send_mail {
+
+  my $body = shift;
+
+  my $subject = shift;
+
+  my $hname = `hostname`;
+  chomp($hname);
+  my $hostname = lc($hname);
+
+  my $scriptname = $0;
+
+  my %send = (
+    from           =&gt;   $hostname,
+    fromdispname   =&gt;   $hostname,
+    to             =&gt; [ "Support\@employer.com" ],
+    recipients     =&gt; [ "#Support" ],
+    subject        =&gt;   "$subject",
+    body           =&gt; [ "", "", @{$body},
+                        "", "this mail is from $scriptname", "" ]
+    );
+
+  my $ret = CdsSmtp::SendMail(\%send);
+
+  print "return value of mail is $ret\n";
+
+}
+
+
+
+sub get_info {
+
+  my ($query, $connection, $field) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    push(@list, $rs-&gt;Fields($field)-&gt;{'value'} );
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub get_info_list {
+
+  my ($query, $connection, $fields) = @_;
+
+  my @list;
+
+  my $rs = executeQuery($query, $connection);
+
+  while (! $rs-&gt;EOF() ) {
+    my %row;
+    for my $field (@{$fields}) {
+      $row{$field} = $rs-&gt;Fields($field)-&gt;{'value'};
+    } 
+    push(@list, \%row);
+    $rs-&gt;MoveNext();
+  }
+
+  return \@list;
+
+}
+
+
+
+sub get_db_handle {
+
+  my $server = 'server\CDS';
+
+  my $database = 'database';
+  my $user     = 'user';
+  my $passwd   = 'password';
+
+  my $dsn = "Provider=SQLOLEDB.1;Password=$passwd;Persist Security Info=False;";
+  $dsn   .= "User ID=$user;Initial Catalog=$database;Data Source=$server;";
+
+  my $connection = Win32::OLE-&gt;new('ADODB.Connection') or die "Cannot get new connection: $!";
+
+  $connection-&gt;Open($dsn);
+
+  return $connection;
+
+}
+
+
+
+sub executeQuery {
+
+  my $query = shift;
+  my $connection = shift;
+
+  my $record_set = Win32::OLE-&gt;new('ADODB.Recordset');
+
+  $record_set = $connection-&gt;Execute($query);
+
+  if(! $record_set ) {
+    print     "error: " . Win32::OLE-&gt;LastError();
+    print LOG "error: " . Win32::OLE-&gt;LastError();
+  }
+
+  return $record_set;
+
+}
+
+
+</pre><html>

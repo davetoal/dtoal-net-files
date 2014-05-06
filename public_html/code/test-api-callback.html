@@ -1,0 +1,253 @@
+<html>
+<head>
+
+<link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css" />
+<script src="http://code.jquery.com/jquery-1.9.1.js"></script>
+<script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js"></script>
+
+
+<script>
+
+  // var api = 'http://tabeeb-db.myimedia.com/tab_api/search/tags/';
+  var api = 'http://tabeeb-db.myimedia.com/tab_api/searchexact/tags/';
+
+
+  var doCallback = function(data, textStatus, jqXHR) {
+
+      // var dom = JSON.parse(data);
+      // var dom = JSON.stringify(data);
+      // console.log("DOM\n" + dom);
+
+      $('#output').html('');
+
+      var count = 0;
+
+      for (i in data) {
+        $('#output').append('<div>' + data[i].name + ', ' + data[i].tag + '</div>');
+        count++;
+      }
+
+      $('#output_count').html('found: ' + count);
+
+  }
+
+
+  var getDom = function(){
+    console.log('getDom');
+    $.get(api+'heart', doCallback() );
+  }
+
+
+  var get_json_dom = function () {
+    console.log('get_json_dom');
+    $.getJSON(api+'heart', doCallback() );
+  }
+
+
+
+
+  var proxy_api = 'http://dtoal.net/code/get-json-from-tabeeb.php?word=';
+
+  var get_json_from_php = function() {
+    console.log('get_json_from_php');
+    $.getJSON(proxy_api+'heart', doCallback(data, testStatus, jqXHR) );
+  }
+
+
+
+
+
+  function get_json_from_php_no_callback() {
+
+    var jqxhr = $.getJSON(proxy_api + '.* cardio.*', function(data, testStatus, jqXHR) {
+      console.log( "get_json_from_php_no_callback, success" );
+      doCallback(data, testStatus, jqXHR);
+    })
+    .done(function() { 
+      console.log( "get_json_from_php_no_callback, done" ); 
+    })
+    .fail(function() { console.log( "error" ); })
+
+  }
+
+
+
+  function get_search_dot_star_space_dot_star_prefix(input_val) {
+
+    var word = $('#search_input').val();
+
+    if (word == '.*') { word = 'dot star'; }
+
+    var jqxhr = $.getJSON(proxy_api + '.* .*' + word + '.*', function(data, testStatus, jqXHR) {
+      doCallback(data, testStatus, jqXHR);
+    })
+    .done(function() { 
+    })
+    .fail(function() { console.log( "error" ); })
+
+  }
+
+
+  function get_search_dot_star_space_prefix(input_val) {
+
+    var word = $('#search_input').val();
+
+    if (word == '.*') { word = 'dot star'; }
+
+    var jqxhr = $.getJSON(proxy_api + '.* ' + word + '.*', function(data, testStatus, jqXHR) {
+      doCallback(data, testStatus, jqXHR);
+    })
+    .done(function() { 
+    })
+    .fail(function() { console.log( "error" ); })
+
+  }
+
+
+  function get_search_dot_star_prefix(input_val) {
+
+    var word = $('#search_input').val();
+
+    if (word == '.*') { word = 'dot star'; }
+
+    var jqxhr = $.getJSON(proxy_api + '.*' + word + '.*', function(data, testStatus, jqXHR) {
+      doCallback(data, testStatus, jqXHR);
+    })
+    .done(function() { 
+    })
+    .fail(function() { console.log( "error" ); })
+
+  }
+
+
+  function get_search_dot_star(input_val) {
+
+    var word = $('#search_input').val();
+
+    if (word == '.*') { word = 'dot star'; }
+
+    var jqxhr = $.getJSON(proxy_api + word + '.*', function(data, testStatus, jqXHR) {
+      doCallback(data, testStatus, jqXHR);
+    })
+    .done(function() { 
+    })
+    .fail(function() { console.log( "error" ); })
+
+  }
+
+
+  function get_search(input_val) {
+
+    var word = $('#search_input').val();
+
+    if (word == '.*') { word = 'dot star'; }
+
+    var jqxhr = $.getJSON(proxy_api + word, function(data, testStatus, jqXHR) {
+      doCallback(data, testStatus, jqXHR);
+    })
+    .done(function() { 
+    })
+    .fail(function() { console.log( "error" ); })
+
+  }
+
+
+
+
+  function getWidth()
+  {
+    xWidth = null;
+    if(window.screen != null)
+      xWidth = window.screen.availWidth;
+
+    if(window.innerWidth != null)
+      xWidth = window.innerWidth;
+
+    if(document.body != null)
+      xWidth = document.body.clientWidth;
+
+    return xWidth;
+  }
+
+
+  function set_br_if_mobile() {
+
+    // if device width < x then .show the br tags, else .hide
+
+    var w = getWidth();
+
+    $('#output_count').html('window width is ' + w);
+
+    console.log('window width is ' + w);
+
+    if ( (w >= 500) && (w < 1000) ) {
+      $('.is_mobile').show();
+      $('.is_mobile_narrow').hide();
+      $('.top_br').hide();
+    } 
+
+    if (w >= 1000) {
+      $('.is_mobile').hide();
+      $('.is_mobile_narrow').hide();
+      $('.top_br').show();
+    }
+
+
+    $('#slider').hide();
+    $('#slider_value').hide();
+
+    $('#slider').slider();
+    $('#slider').slider("option", "max", 10);
+    $('#slider').slider("option", "min", 2);
+
+    $('#slider').on("slidechange", function(event, ui) {  
+      $('#slider_value').html('letters to remove: ' + ui.value);
+    } );
+
+  }
+
+
+
+</script>
+
+</head>
+
+<body onload="set_br_if_mobile();">
+
+  <br class="top_br">
+  testing tabeeb sentence tags,
+  <br class="is_mobile">
+  searchexact api
+  <br>
+  http://tabeeb-db.myimedia.com/tab_api/searchexact/tags
+
+  <!--
+  <input type="button" value="getDom()" onclick="getDom();">
+  <input type="button" value="get_json_dom()" onclick="get_json_dom();">
+  <input type="button" value="get_json_from_php()" onclick="get_json_from_php();">
+  <input type="button" value="get_json_from_php_no_callback()" onclick="get_json_from_php_no_callback();">
+  -->
+
+  <br>
+
+  <input name="search_input" type="text" value="cancer" class="text" id="search_input"/>
+  <br class="is_mobile">
+  <input type="button" value="search on term only"   onclick="get_search();">
+  <br class="is_mobile_narrow">
+  <input type="button" value="search on term.*"      onclick="get_search_dot_star();">
+  <br class="is_mobile">
+  <input type="button" value="search on .* term.*"   onclick="get_search_dot_star_space_prefix();">
+  <br class="is_mobile_narrow">
+  <input type="button" value="search on .* .*term.*" onclick="get_search_dot_star_space_dot_star_prefix();">
+  <br class="is_mobile">
+  <input type="button" value="search on .*term.*"    onclick="get_search_dot_star_prefix();">
+  <br>
+  <div id="slider" style="width: 250px"></div><label id="slider_value">letters to remove: 2</label>
+  <br class="top_br">
+  <div id="output_count"></div>
+  <br>
+  <div id="output"></div>
+
+</body>
+</html>
+

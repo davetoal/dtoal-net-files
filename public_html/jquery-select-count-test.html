@@ -1,0 +1,76 @@
+<html>
+<head>
+
+<title>call select-count php from jquery</title>
+
+<script src="jquery.js"></script>
+
+
+<script>
+
+  function runquery() {
+
+    var string = "australia";
+
+    $("#resultpane").html("starting in runquery");
+
+    // $.get("select-count-from-segcount.php", { query: "australia" }, function(data){ $("#resultpane").html(data); } );
+
+    $.get("select-count-from-segcount.php", { query: "australia" }, function(data){ showresult(data); } );
+
+  };
+
+
+  function showresult(data) {
+
+    $("#resultpane").html("in showresult");
+
+    var string = "data is " + data + ".";
+
+    $("#datapane").html(string);
+
+    // var results = JSON.parse(data);
+
+    // var obj = jQuery.parseJSON('{"name":"John"}');
+    // in showresult
+    // data is {"count":"5"} .
+
+    // var results = jQuery.parseJSON(data);
+    // dstring = "'" + data + "'";
+    // var results = jQuery.parseJSON(dstring);
+    // var results = jQuery.parseJSON('{"count":"5"}');
+    // var string = "count = " + results.count + ".";
+
+    // ostring = "var obj = " + data.toString() + ";";
+    // $("#resultpane").html(ostring);
+    // eval(ostring);
+
+    // var obj = {"count":"5"} ;
+    // var string = "count = " + obj.count + ".";
+
+    var string = "count = " + data + ".";
+
+    $("#resultpane").html(string);
+
+  };
+
+
+</script>
+
+</head>
+
+
+<body>
+
+  <input type="button" value="query australia" onclick="runquery();">
+
+  <div id="resultpane">no query data yet</div>
+
+  <div id="datapane">result of query is</div>
+
+
+</body>
+
+
+</html>
+

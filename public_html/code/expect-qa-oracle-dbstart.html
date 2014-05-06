@@ -1,0 +1,66 @@
+<html><head><title>expect-qa-oracle-dbstart</title></head>
+<body><pre>
+#!/usr/local/bin/expect -f
+
+puts "I received $argv"
+
+set timeout -1
+spawn ksh
+match_max 100000
+
+send -- "rsh qa-oracle\r"
+expect ")-&gt;"
+
+send -- ". ./.profile\r"
+expect ")-&gt;"
+
+send -- "svrmgrl\r"
+expect "SVRMGR&gt;"
+
+send -- "connect internal\r"
+expect "SVRMGR&gt;"
+
+send -- "startup mount;\r"
+expect "SVRMGR&gt;"
+
+#send -- "recover automatic database until time 'YYYY-MM-DD:HH24:MI:SS';\r"
+#expect "SVRMGR&gt;"
+
+send -- "recover  automatic database using backup controlfile until change $argv;\r"
+expect "SVRMGR&gt;"
+
+#send -- "alter database noarchivelog;\r"
+#expect "SVRMGR&gt;"
+
+send -- "alter database open resetlogs;\r"
+expect "SVRMGR&gt;"
+
+send -- "shutdown immediate\r"
+expect "SVRMGR&gt;"
+
+send -- "startup mount\r"
+expect "SVRMGR&gt;"
+
+send -- "alter database noarchivelog;\r"
+expect "SVRMGR&gt;"
+
+send -- "alter database open;\r"
+expect "SVRMGR&gt;"
+
+puts "Now sleeping 15 before starting pubsys..."
+sleep 15
+
+send -- "qa-oracle.pubsys start\r"
+expect ")-&gt;"
+
+send -- "exit\r"
+expect ")-&gt;"
+
+send -- "exit\r"
+
+
+
+
+</pre>
+</body>
+</html>

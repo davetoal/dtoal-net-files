@@ -1,0 +1,386 @@
+<html><head><title>sxope</title></head>
+<pre>
+#!/bin/ksh
+# dave toal Wed Oct 13 15:57:53 EDT 1999
+#
+
+pw="admin/password"
+
+if [ -z "$2" ]
+then
+  echo "\n  sxope prints appworx' data about modules and chains
+
+  &gt;m&lt;odule NAME | &gt;c&lt;hain NAME [f]  (% == *) \c
+"
+
+  read t c zz
+  [ -z "$c" ] && echo && exit 0
+  oname=`echo $c | tr 'a-z' 'A-Z'`
+  tname=`echo $t | cut -c 1 | tr 'a-z' 'A-Z'`
+else
+  oname=`echo $2 | tr 'a-z' 'A-Z'`
+  tname=`echo $1 | cut -c 1 | tr 'a-z' 'A-Z'`
+fi
+
+[ -z "$oname" ] && exit 0
+
+[ -z "$zz" ] && zz=$3
+
+# sxope c calls $0 m $modname $zz $chname $detseq
+
+
+case $tname
+in
+
+  M)
+    # get list of module seqence numbers that match module named $2
+    slist=`echo "select so_job_seq
+                   from so_job_table
+                  where so_module like '$oname';" \
+           | sqlplus -s $pw | grep [0-9] | grep -v "rows selected" | sort -n`
+
+    for s in $slist
+    do
+
+      echo "set linesize 500 
+            set pagesize 200
+         select so_module, so_program, so_node, so_library, 
+                so_command_type, so_login_number, so_application, 
+                so_queue_seq, so_printer_seq,
+                so_job_descr
+           from so_job_table
+          where so_job_seq = $s;" \
+      | sqlplus -s $pw | grep [A-Z] | grep -v SO_MODULE \
+      | read mod prog node libr \
+             comd lognum appl \
+             quenum printnum \
+             descr
+
+      echo "select so_appl_path 
+              from so_applications
+             where so_appl like '$libr';" \
+      | sqlplus -s $pw | grep -v "\-\-\-" | grep -v "^$" \
+      | grep -v SO_APPL &gt; /tmp/.appath
+      appath=`cat /tmp/.appath`
+
+      if [ $lognum -ne 0 ]
+      then
+        echo "select so_login, so_net_connect
+                from so_ids 
+               where so_login_number = $lognum;" \
+        | sqlplus -s $pw | grep -v "\-\-\-" | grep -v "^$" | grep -v SO_ \
+        | read dblogin host
+      else
+        dblogin=""
+      fi
+
+
+      # join this query, so_job_table
+      echo "select so_queue
+              from so_queues
+             where so_queue_seq = $quenum;" \
+      | sqlplus -s $pw | grep [A-Z] | grep -v SO_Q | read queuename
+
+
+      prtext=""
+      prname=""
+      [ $printnum -ne 0 ] && {
+        echo "select so_printer 
+                from so_printers 
+               where so_printer_seq = $printnum;" \
+        | sqlplus -s $pw | grep [A-Z] | grep -v SO_P | read prname
+        prtext="\n Printer group:    Printer:"
+      }
+
+
+      # corrections and appquirx
+      [ "$appath" = "\$SQLOPER_HOME" ] && eval appath=$appath \
+        && echo $appath &gt; /tmp/.appath
+
+
+      # case $comd of ?
+      if [ $comd = SCHEDULE ] 
+      then
+
+        libr="     "
+        appath=""
+        compath=""
+        subpt=""
+        &gt; /tmp/.compath
+        progt="  ===&gt;&gt; Chain:"
+        librt=""
+        patht=""
+
+      else
+
+        echo "select substr(so_command_path,1,40) 
+                from so_command_paths 
+               where so_commd_type like '$comd';" \
+        | sqlplus -s $pw | grep -v "\-\-\-" | grep -v SO_COMMAND_PATH \
+        | grep -v "^$" &gt; /tmp/.compath
+
+        if [ -s /tmp/.compath ]
+        then 
+          compath="/`cat /tmp/.compath`"
+          subpt="Subpath:"
+        else
+          compath=""
+          subpt=""
+        fi
+
+        progt="Program:"
+        librt="Library:"
+        patht="Path:"
+
+      fi
+
+
+      echo ",-------------------------------------------------------------------."
+
+      echo " #$s  $mod  Description: $descr
+ Node: $node \t$librt $libr \t$patht $appath
+ Program type: $comd     \t\t$subpt `cat /tmp/.compath`
+ $progt $prog $prtext $prname
+ Database ID: $dblogin \t Queue: $queuename "
+
+
+      echo "select distinct so_prompt, so_prompt_descr
+              from so_job_prompts 
+             where so_job_seq = $s;" \
+      | sqlplus -s $pw | grep -v "\-\-\-" | grep -v SO_PROMPT \
+      | grep -v "^$" &gt; /tmp/.so_prompts
+
+
+      if grep "no rows selected" /tmp/.so_prompts &gt; /dev/null
+      then
+        echo "no prompts" &gt; /dev/null
+      else
+
+        echo " Prompts:"
+        grep -v "rows selected" /tmp/.so_prompts &gt; /tmp/.so_promptss
+
+        echo "select distinct so_prompt, substr(so_prompt_dflt,1,45)
+                from so_job_prompts 
+               where so_job_seq = $s;" \
+        | sqlplus -s $pw | grep -v "\-\-\-" | grep -v SO_PROMPT \
+        | grep -v "^$" | grep -v "rows selected" &gt; /tmp/.so_prompt_deflt
+
+
+        # would you believe nt pathnames starting with \c ?
+        if grep "\\\c" /tmp/.so_prompt_deflt &gt; /dev/null
+        then
+          sed 's/\\/\\\\/' /tmp/.so_prompt_deflt &gt; /tmp/.so_prompt_deflt
+        fi
+
+
+        cat /tmp/.so_promptss | while read ll
+        do
+          n=`echo $ll | awk '{print $1}'`
+          descrip=`echo $ll | cut -c 3-`
+          lll=`head -$n /tmp/.so_prompt_deflt | tail -1 | awk '{print $2}'`
+          echo "   $descrip\t-- $lll"
+        done
+
+      fi
+
+
+# echo "&gt;&gt; chain name is $4 this object's so_det_seq is $5"
+# module-level, chain-level conditions & prompts?
+# mod conds &gt;/ chain.  chain mod promt &lt; so_objects
+# mod promts &lt; ?
+
+      # $5 is so_det_seq from an instance of sxope c
+      # -z $5 && don't know where to get conditions yet
+
+      if [ ! -z "$5" ]
+      then
+
+        echo "set linesize 100
+           select so_cond_timing, 
+                  substr(so_condition_1,1,15), 
+                  so_qualifier, 
+                  substr(so_condition_2,1,15),
+                  substr(so_action,1,15),
+                  substr(so_act_arg,1,30)
+             from so_object_cond
+            where so_object_seq = $5;" \
+        | sqlplus -s $pw | grep -v "\-\-\-" | grep -v SUBSTR \
+        | grep -v "^$" \
+        | awk '{print " ", $1, $2, $3, $4, $5, $6, $7, $8, \
+          $9, $10, $11, $12, $13, $14, $15}' &gt; /tmp/.condition_list.$$
+        # yah, I know but it's 01:19
+
+        grep "no rows selected" /tmp/.condition_list.$$ &gt; /dev/null || {
+          echo " Conditions:"
+          grep -v "rows selected" /tmp/.condition_list.$$
+        }
+
+      fi
+
+# extra info and test cases
+
+      if [ "$zz" = "f" ]
+      then
+
+        case $comd
+        in
+
+          RSH )
+            user=`echo $dblogin | tr '@' ' ' | awk '{print $1}'`
+           echo "
+   rsh $host -l $user 'cat $appath$compath/$prog'
+"
+#           eval "rsh $host -l $user 'cat $appath$compath/$prog'"
+          ;;
+
+
+          SCHEDULE )
+            echo "
+    ./sxope c $prog f
+"
+          ;;
+
+
+          *)
+            echo "
+  $dblogin `cat /tmp/.appath``cat /tmp/.compath`/$prog
+"
+          ;;
+
+
+        esac
+
+      fi
+
+      echo "\`-------------------------------------------------------------------'"
+
+    done
+
+  ;;
+  # case $thame of M) ends
+
+
+  C)
+
+  # so_chain_detail.so_det_seq == so_object_cond.so_object_seq
+
+    list=`echo "select distinct so_chain_name
+                  from so_chain_header
+                 where so_chain_name like '$oname';" \
+           | sqlplus -s $pw | grep [A-Z*] | grep -v SO_CHAIN_NAME`
+
+    [ -z "$list" ] && echo "\n \"$oname\" does not name a chain.\n" && exit 0
+
+    if [ `echo "$list" | wc -l | nawk '{print $1}'` -gt 1 ]
+    then
+      echo "\n That matches these chains:\n\n$list\n\n Please pick one.\n"
+      exit 0
+    fi
+
+
+    echo "set linesize 300
+          select distinct a.so_chain_name, a.so_operator, a.so_chain_seq, 
+                 b.so_queue, a.so_days_of_week,
+                 a.so_chain_descr
+            from so_chain_header a, so_queues b
+           where a.so_chain_name like '$oname'
+             and b.so_queue_seq = a.so_queue_seq;" \
+    | sqlplus -s $pw | grep [A-Z] | grep -v SO_ \
+    | read chname node chainseq queue rundays chdescrip
+
+
+    echo "select to_char(so_last_rundate, 'DD-MON-YYYY HH24:MI:SS')
+            from so_chain_header
+           where so_chain_name like '$oname';" \
+    | sqlplus -s $pw | grep -v SO_ | grep -v "\-\-\-" | grep -v "selected" \
+    | grep -v "^$" | read lastrun
+
+    if [ -z "$lastrun" ]
+    then
+      ltext=""
+    else
+      ltext="Last rundate:"
+    fi
+
+
+    echo "select to_char(so_next_rundate, 'DD-MON-YYYY')
+            from so_chain_header
+           where so_chain_name like '$oname';" \
+    | sqlplus -s $pw | grep -v SO_ | grep -v "\-\-\-" | grep -v "selected" \
+    | grep -v "^$" | read nextrundate
+
+    if [ -z "$nextrundate" ]
+    then
+      ntext="No next rundate."
+      nextruntime=""
+    else
+      ntext="Next rundate:"
+      echo "select so_start_time
+              from so_chain_header
+             where so_chain_name like '$oname';" \
+      | sqlplus -s $pw | grep [0-9] | read startsecs
+      # nextrun start time in seconds?!  jeez, you guys....
+      hours=`expr $startsecs / 3600`
+      chunk=`expr $hours \* 3600`
+      remdr=`expr $startsecs - $chunk`
+      mins=`expr $remdr / 60`
+      [ $mins -lt 10 ] && mins="0$mins"
+      nextruntime="$hours:$mins"
+    fi
+
+
+
+    echo "\n\n $chname \tDescription: $chdescrip
+ SMTWTFS   Node: $node   Queue: $queue
+ $rundays  $ltext $lastrun  $ntext $nextrundate $nextruntime
+"
+
+    echo "select distinct so_module from so_job_table where so_program like '$chname';" \
+    | sqlplus -s $pw | grep [A-Z] | grep -v SO_MODULE | while read m
+    do
+      echo " Schedule module $m runs $chname"
+    done
+
+
+    bits=`echo "select so_chain_order, so_task_name, so_act_flag,
+                       so_job_seq, so_det_seq
+                  from so_chain_detail
+                 where so_chain_seq in
+               (  select so_chain_seq
+                    from so_chain_header
+                   where so_chain_name like '$oname' );" \
+            | sqlplus -s $pw | grep [A-Z*] | grep -v SO_CHAIN | sort -n -k 1`
+
+# echo "$bits"
+
+    echo "$bits" | while read x modname activ y detseq
+    do
+      state="              "
+      [ $activ = N ] && state=" **INACTIVE** "
+      echo "
+      $state $modname \t\t$chname"
+
+      [ -z "$zz" ] && zz=z
+      $0 m $modname $zz $chname $detseq
+
+    done
+
+  ;;
+
+
+
+  *)
+
+    echo "\n $tname is not a valid type.  Use m for module, c for chain.\n"
+    exit 0
+
+  ;;
+
+esac
+
+echo
+
+exit 0
+
+
+</pre><html>

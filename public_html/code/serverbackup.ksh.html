@@ -1,0 +1,37 @@
+<html><head><title>sentrybackup.ksh</title></head>
+<pre>
+#!/bin/ksh
+# dave toal
+#
+
+
+logfile=/tmp/serverbackup.log
+
+until mt -f /dev/rmt/0 status &gt; /dev/null 2&gt;&1
+do
+  echo "Tape isn't ready yet..."
+  sleep 2
+done
+
+echo "starting backup of server at `date`" &gt; $logfile
+
+for fs in `df | grep -v tmp | grep -v proc | grep -v fd | grep -v Mounted | awk '{ print $1 }'`
+do
+
+  echo "Dumping $fs at `date`..."
+  ufsdump 0ulf /dev/rmt/0cbn $fs
+  echo
+
+done | tee -a $logfile
+
+
+echo "Backup complete at `date`" &gt;&gt; $logfile
+
+mt -f /dev/rmt/0 rewoffl &
+
+mailx -s "Server backup done" unix@employer.com &lt; $logfile
+
+exit 0
+
+
+</pre><html>

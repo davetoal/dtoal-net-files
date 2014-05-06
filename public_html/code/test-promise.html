@@ -1,0 +1,185 @@
+<html>
+<head>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.0/jquery.min.js" type="text/javascript" charset="utf-8"></script>
+
+<script>
+
+
+  var max_rows = 30, max_cols = 60;
+
+
+  function clear_table() {
+
+    $('#output_table').html('<table id="output_table" border="0" cellpadding="0" cellspacing="0"></table>');
+
+    for (var row = 0; row < max_rows; row++) {
+
+      $('#output_table').append('<tr id="output_table_row_' + row + '"></tr>');
+
+      for (var col = 0; col < max_cols; col++) {
+
+        $('#output_table_row_' + row).append('<td id="output_table_row_' + row + '_col_' + col + '" width="20" bgcolor="#555555"> . </td>');
+
+      }
+
+    }
+
+  }
+
+
+  function start_loops_parallel() {
+
+    for (var row = 0; row < max_rows; row++) {
+
+      for (var col = 0; col < max_cols; col++) {
+
+        $('#output_table_row_' + row + '_col_' + col).html('p');
+
+        var value = 'P';
+
+        set_value_of(row, col, value);
+
+      }
+
+    }
+
+  }
+
+
+
+  function start_loops_serial() {
+
+    for (var row = 0; row < max_rows; row++) {
+
+      for (var col = 0; col < max_cols; col++) {
+
+        cell = $('#output_table_row_' + row + '_col_' + col);
+        cell.html('s');
+
+        if (cell.hasClass('cellGreen'))   { cell.removeClass('cellGreen'); }
+
+        var delay = Math.floor((Math.random()*3000)+1);
+        delay = 100;
+
+        // var cell_done = 0;
+        // setTimeout(function () { cell_done = 1; }, delay);
+        // while(cell_done == 0) { for (var i = 0; i < 10000; i++) { t = t + 0; }  t = t + 1; }
+
+        // setTimeout(function () { cell.addClass('cellGreen'); }, delay);
+
+        // var counter = 0;    
+        // var interval = window.setInterval(function() {
+        //    counter += 1;
+        //    cell.html(counter);
+        //    if(counter == 99) {
+        //        clearInterval(interval);
+        //        var interval2 = window.setInterval(function() {
+        //            counter -= 1;
+        //            cell.html(counter);
+        //            if(counter == 0) { clearInterval(interval2); }
+        //        }, 250);
+        //    }
+        // }, 250);
+
+
+        cell.addClass('cellRed');
+
+
+      }
+
+    }
+
+  }
+
+
+
+  function set_value_of(row, col, value) {
+
+    var cell = $('#output_table_row_' + row + '_col_' + col);
+
+    var delay = Math.floor((Math.random()*3000)+1);
+
+    if (cell.hasClass('cellGreen'))   { cell.removeClass('cellGreen'); }
+
+    if (cell.hasClass('cellRed')) {
+      delay = delay + 100;
+    } else {
+      cell.addClass('cellLight');
+    }
+
+
+    var will_set_value = $.Deferred();
+
+
+    will_set_value.done(function () {
+
+      var chance = Math.floor((Math.random()*100)+1);
+
+      if (chance < 20) {
+
+        cell.html('_');
+        if (cell.hasClass('cellLight')) { cell.removeClass('cellLight'); }
+        if (! cell.hasClass('cellRed')) { cell.addClass('cellRed'); }
+
+        set_value_of(row, col, value);
+
+      } else {
+
+        cell.html(value);
+        if (cell.hasClass('cellLight')) { cell.removeClass('cellLight'); }
+        if (cell.hasClass('cellRed'))   { cell.removeClass('cellRed'); }
+        if (! cell.hasClass('cellRed')) { cell.addClass('cellGreen'); }
+
+      }
+
+    });
+
+
+    setTimeout(function () { will_set_value.resolve(); }, delay);
+
+  }
+
+
+</script>
+
+<style>
+
+.cellRed {
+  background-color: Red;
+}
+
+.cellGreen {
+  background-color: Green;
+}
+
+.cellLight {
+  background-color: Blue;
+}
+
+
+</style>
+
+</head>
+
+<body onload="clear_table()">
+
+  <p>Test parallel execution of inner task of nested loops
+
+  <br>
+
+  <input type="button" value="start tasks in serial" onclick="start_loops_serial();">
+  <input type="button" value="start tasks in parallel" onclick="start_loops_parallel();">
+  <input type="button" value="clear table" onclick="clear_table();">
+  <input type="button" value="set 10, 20 to O" onclick="set_value_of(10, 20, 'O');">
+
+  <br>
+
+  <div id="output_div"></div>
+
+  <br>
+
+  <table id="output_table" border="0" cellpadding="0" cellspacing="0"></table>
+
+
+

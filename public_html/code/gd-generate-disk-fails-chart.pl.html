@@ -1,0 +1,119 @@
+<html><head><title>gd-generate-disk-fails-chart.pl</title></head>
+<pre>
+
+
+# dave toal
+
+# perl58
+
+# for each line of the disk log
+# y val is the date part of the timestamp
+# x val is the time part of the timestamp
+# delays as gray pixels
+# longer ones as scaled bars
+# fails as red bars
+
+# size is num of days high by num seconds/ 100
+# 86400 seconds per day
+# chart is 864 wide
+
+# only 185 days of data
+# so make bars 4 pixels high
+# chart is 740 high
+
+# add borders for labels and text
+
+
+use strict;
+
+
+my $width = 50 + 864 + 50;
+my $height = 100 + 749 + 50;
+
+my $leftborder = 50;
+my $topborder = 100;
+
+my $barheight = 4;
+
+
+use GD;
+
+use lib "./lib";
+use Date::Parse;
+
+
+my $im = new GD::Image($width, $height);
+
+my $white = $im-&gt;colorAllocate(255, 255, 255);
+my $black = $im-&gt;colorAllocate(  0,   0,   0);       
+my $red   = $im-&gt;colorAllocate(255,   0,   0);      
+my $blue  = $im-&gt;colorAllocate(  0,   0, 255);
+
+$im-&gt;transparent($white);
+$im-&gt;interlaced('true');
+
+
+my $log = "dtoal-diskmon-log.txt";
+open (L, "&lt; $log");
+
+my $first;
+my $firstmidsecs;
+
+while (my $line = &lt;L&gt;) {
+
+  next unless ($line =~ /^write/);
+
+  my @b = split(/\s+/, $line);
+  my $dt = "$b[7] $b[8] $b[10]";
+  my $t = $b[9];
+  my $stat = $b[4];
+  my $duration = $b[2];
+
+  unless ($dt and $t and $stat) {
+    print "missing val, $dt and $t and $stat\n";
+  }
+
+  unless ($first) {
+    $first = $dt;
+    $firstmidsecs = str2time("$first 00:00:00");
+  }
+
+  # x is number of seconds since midnight that day / 100
+  my $midsecs = str2time("$dt 00:00:00");
+  my $nowsecs = str2time("$dt $t");
+  my $xdiff = $nowsecs - $midsecs;
+  my $xoff = $xdiff / 100;
+  my $ax = $leftborder + $xoff;
+  my $bx = $ax + int($duration / 60) + 1;
+
+  # y is number of days since beginning of log;
+  my $ydiff = $midsecs - $firstmidsecs;
+  my $yoff = ( $ydiff / 86400 ) * $barheight;
+  my $ay = $topborder + $yoff;
+  my $by = $ay + $barheight - 1;
+
+  # = $ymax - $bottomborder - $yoff;
+
+  # print "$dt, $t, $stat $first, $x, $y, $duration secs\n";
+
+  # colour by $status
+
+  $im-&gt;rectangle($ax, $ay, $bx, $by, $black);
+
+  # $im-&gt;rectangle(0,0, $i,$i, $black);
+  # $im-&gt;line(0,699, $i,$i, $blue);
+
+
+}
+
+close(L);
+
+
+binmode STDOUT;
+
+open (F, "&gt; disk-fails-chart.jpg");
+print F $im-&gt;jpeg;
+close(F);
+
+
+</pre><html>

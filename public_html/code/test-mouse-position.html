@@ -1,0 +1,57 @@
+<html>
+<head>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.0/jquery.min.js" type="text/javascript" charset="utf-8"></script>
+
+
+<script>
+
+
+  function start_get_mouse_position() {
+
+    document.onmousemove = function(e) {
+      var x = e.pageX;
+      var y = e.pageY;
+
+      $('#dot0').offset({ top: y - 6, left: x + 17 });
+      $('#dot1').offset({ top: y - 6, left: x - 28 });
+      $('#dot2').offset({ top: y - 28, left: x - 6 });
+      $('#dot3').offset({ top: y + 17, left: x - 6 });
+
+    };
+
+  }
+
+
+  function stop_get_mouse_position() {
+
+    document.onmousemove = function() { };
+
+  }
+
+
+
+</script>
+
+
+
+</head>
+
+<body>
+
+  <div id="dot0" style="position: absolute; height: 11; width: 11;"> <img src="bullet.gif" height=11 width=11> </div>
+  <div id="dot1" style="position: absolute; height: 11; width: 11;"> <img src="bullet.gif" height=11 width=11> </div>
+  <div id="dot2" style="position: absolute; height: 11; width: 11;"> <img src="bullet.gif" height=11 width=11> </div>
+  <div id="dot3" style="position: absolute; height: 11; width: 11;"> <img src="bullet.gif" height=11 width=11> </div>
+
+  <br>
+  <p>test mouse cursor trailer
+
+  <br>
+  <br>
+  <input type="button" value="start mouse tracking" onclick="start_get_mouse_position();">
+  <input type="button" value="stop mouse tracking" onclick="stop_get_mouse_position();">
+
+</body>
+</html>
+

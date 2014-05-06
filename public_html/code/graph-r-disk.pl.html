@@ -1,0 +1,128 @@
+<html><head><title>graph-r-disk.pl</title></head>
+<pre>
+
+
+# dave toal
+# graph output of disk logger
+
+
+use Tk;
+use strict;
+
+  my $infile = 'Q:\ScheduledHousekeeping\tmp\disk-space.log';
+# my $infile = 'Q:\ScheduledHousekeeping\tmp\edison-print-disk-space.log';
+# my $infile = 'Q:\ScheduledHousekeeping\tmp\burr-ridge-print-disk-space.log';
+# my $infile = 'Q:\ScheduledHousekeeping\tmp\proofs-dir-disk-space.log';
+# my $infile = 'Q:\ScheduledHousekeeping\tmp\njeffp2-proofs-disk-space.log';
+
+
+my $main = new MainWindow;
+
+my $c = $main-&gt;Canvas;
+
+$c-&gt;configure(
+    -height  =&gt; '600',
+    -width   =&gt; '1000',
+    -relief  =&gt; 'flat',
+    -bd      =&gt; 2,
+  );
+
+$c-&gt;pack;
+
+my $onegig = 1024 * 1024 * 1024;
+my $scale = $onegig * 0.45;
+
+
+# graph calibration
+my @horizlines;
+for (my $i = 0; $i &lt; 230; $i += 10) {
+  push(@horizlines, $i * $onegig);
+}
+
+
+
+my $ymax = 550;
+
+my $xmin = 15;
+my $xmax = 1000;
+
+my $x = $xmin + 20;
+
+my $skipcount = 0;
+my $skipmax;
+
+my $linecount;
+print "getting line count\n";
+open(IN, "&lt; $infile");
+while(&lt;IN&gt;) {
+  $linecount++;
+}
+close(IN);
+print "linecount is $linecount\n";
+$skipmax = $linecount - 950;
+print "skipmax is $skipmax\n";
+
+
+my $firstdate = 1;
+my $olddate = "";
+my $date;
+
+
+open(IN, "&lt; $infile");
+
+while(&lt;IN&gt;) {
+
+  $skipcount++;
+  next if ($skipcount &lt; $skipmax);
+
+  my @info = split(/\s+/, $_);
+
+  # R:\  12_20_2007-18:28:10  37788704768
+
+  my $date = (split(/-/, $info[1]))[0];
+
+  my ($mon, $day, $yr) = (split(/_/, $date));
+  my $date = $mon . "/" . $day;
+
+  if ($date ne $olddate) {
+    $olddate = $date;
+    if ($firstdate) {
+      $firstdate = 0;
+    } else {
+      print "new date $date\n";
+      $c -&gt; create('line', $x,$ymax =&gt; $x,600 );
+      # $c -&gt; create('text', $x+20,575, -text =&gt; $date );
+      $c -&gt; create('text', $x+7,575, -text =&gt; $mon );
+      $c -&gt; create('text', $x+15,588, -text =&gt; $day );
+    }
+  }
+
+  my $yval = $info[2];
+  my $y = $ymax - ($yval / $scale);
+  $c -&gt; create('line', $x,$ymax =&gt; $x,$y );
+
+  $x++;
+
+}
+
+
+for my $val (@horizlines) {
+  my $y = $ymax - ($val / $scale);
+  $c -&gt; create('line', $xmin + 10,$y =&gt; $xmax,$y, -fill =&gt; "#1A1A1A" );
+  my $amt = $val / $onegig;
+  $c -&gt; create('text', $xmin,$y, -text =&gt; $amt );
+}
+
+
+  $c -&gt; create('text', 170,35, -text =&gt; "Graph of free space in R:, vertical axis is number of gigs free" );
+# $c -&gt; create('text', 170,35, -text =&gt; "Graph of free space in ednfile, vertical axis is number of gigs free" );
+# $c -&gt; create('text', 170,35, -text =&gt; "Graph of free space in chibfp2, vertical axis is number of gigs free" );
+# $c -&gt; create('text', 170,35, -text =&gt; "Graph of free space in proofs, vertical axis is number of gigs free" );
+# $c -&gt; create('text', 170,35, -text =&gt; "Graph of free space in njeffp2, vertical axis is number of gigs free" );
+
+# $c-&gt;postscript( -file  =&gt;  "canvas.ps" ); 
+
+MainLoop; 
+
+
+</pre><html>

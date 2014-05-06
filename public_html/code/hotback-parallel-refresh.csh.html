@@ -1,0 +1,759 @@
+<html><head><title>hotback-parallel-refresh.csh</title></head>
+<pre>
+#!/usr/bin/csh 
+# echo "this is $0 in `pwd` on `hostname` with $1 $2 $3." 
+#
+# File: hotback.csh 
+#
+#     DESCRIPTION
+#     -----------
+#
+#     THIS SCRIPT PERFORMS HOT BACKUPS. 
+#
+#	This script also ftp's the export files created by the
+# 	hot backup action, to a second oracle instance, after
+#	shutting that instance down.  When the script restarts
+#	the second instance, it is a mirror of the first.
+#
+#	Parallel algorithm devised by Harvinder Singh,
+#	implemented by Dave Toal.
+#
+#     EACH TABLESPACE RELATED DATAFILES ARE COPIED TO THE BACKUP
+#     AREA. 
+#
+#     COPIES OF CONTROL FILES, REDO LOG FILES, ARCHIEVED LOG FILES,
+#     PARAMETER FILE, CONFIGURATION FILE, TRACE FILES AND ALERT LOG FILES 
+#     ARE COPIED TO BACKUP AREA AND THEN TAR'D TO TAPE.
+#
+#
+#     ENVIRONMENT VARIABLES
+#     ---------------------
+#    
+#     HOTBKUP_DIR    - A TEMPORARY DIRECTORY IN WHICH TEXT FILES CREATED
+#     BACKUP_DEST   - ALL FILES COPIED INTO THIS DIRECTORY BEFORE USING TAR
+#     ARCHIVE_DEST - DIRECTORY WHERE ARCHIEVE LOG FILES ARE STORED
+#     CONFIG        - DIRECTORY WHERE CONFIG FILE IS STORED
+#     UDUMP         - DIRECTORY WHERE USER PROCESSES WRITE TRACE FILES
+#     BDUMP         - DIRECTORY WHERE BACKGROUND PROCESSES WRITE TRACE FILES
+
+
+# disable FirstWatch agent monitoring
+
+# echo "Creating FirstWatch flag file, to suspend agent monitoring."
+touch /u01/app/oracle/product/7.3.4/firstwatch-off
+
+
+# THIS VARIABLE $dest IS THE NAME OF THE BOX WHICH IS THE TARGET 
+# OF THIS PROCESS
+
+# THE COM_FTP, EXPECT-DBSHUT, AND EXPECT-DBSTART SCRIPTS ARE ALL
+# CURRENTLY HARD-CODED WITH THE NAME OF THIS HOST AS WELL
+
+
+
+echo "This is $0 in `pwd`"
+
+if ( ${#argv} &lt; 1 ) then
+
+  echo "No hostname given.  Setting destination to oracle3."
+  set dest = oracle3
+
+else
+
+  echo "Destination specified as ${argv[1]}"
+  set dest = ${argv[1]}
+
+endif
+
+echo "Destination host is $dest."
+
+
+# This is the name of the destination box.
+# this variable is used at the end of this
+# script.  com_ftp also names the destination
+# box.  The expect dbshut and dbstart scripts
+# also name the destination box. 
+
+
+#	INITIALIZE VARIABLES
+set SQLPLUS = 'sqlplus -s /'
+set sqlfile = ./LOG/TX01/temp.sql
+set header = ./LOG/TX01/temp.header
+set rundate = `date +%m%d`
+set DBENV = TX01
+
+
+#	SET UP THE ENVIRONMENT
+source /u01/app/oracle/product/7.3.4/hotbkup/${DBENV}.env
+
+cd $HOTBKUP_DIR
+set database = $DBNAME
+set errlog = ./LOG/TX01/$DBNAME.fatalerr
+set analyzelog = ./LOG/TX01/anlyzlog
+set com_ftp_errlog = $ORACLE_HOME/hotbkup/LOG/TX01/com_ftp_errors.fatalerr
+set log = ./LOG/TX01/anlyzlog
+
+cat /dev/null &gt; $errlog
+cat /dev/null &gt; $com_ftp_errlog
+cat /dev/null &gt; $log
+
+
+# step-by-step process echoes into analyzelog
+# because the thing runs fine on a slower box, 
+# but doesn't finish completely here on a faster box, 
+# with a slower net connection
+# dave toal 260 2k
+
+echo "$0 starting refresh to $dest at `date`" | tee $log
+
+
+# THE DATABASE MUST BE UP TO TAKE HOTBACKUP
+
+set ERRCHK = `ps -fu oracle | grep -v grep | grep -c pmon_$database`
+if ($ERRCHK == 0) then
+  echo "The datbase $database is down (PMON process not found )" &gt;&gt; $errlog
+  echo "Hot backup not taken, exiting at `date`" &gt;&gt; $errlog
+  exit 1
+else
+  echo "$database is up" | tee -a $log
+endif
+
+
+
+# Shut down database on destination host
+#   this process depends on external scripts
+#   -- so does the ftp-to-$dest process -- 
+#   we check that they exist first
+
+foreach script ( <a href="expect-oracle3-dbshut.html">expect-$dest-dbshut</a> <a href="expect-oracle3-dbstart.html">expect-$dest-dbstart</a> <a href="com_ftp.html">com_ftp</a> )
+
+  set ex = $HOTBKUP_DIR/$script
+
+  if ( ! -e $ex ) then
+    echo "$ex is not in $HOTBKUP_DIR?" | tee -a $errlog
+  else
+    if ( ! -x $ex ) then
+      echo "$ex is not executable?" | tee -a $errlog
+    else
+      echo "$ex exists and is executable." | tee -a $log
+    endif
+  endif
+
+end
+
+
+# now that external scripts are verified, run dbshut on $dest
+
+$HOTBKUP_DIR/expect-$dest-dbshut
+
+
+
+# Remove all working files $dest:/u0*/oradata/TX01/*
+#   and clean $HOTBKUP_DEST and logs here
+
+rsh $dest 'rm /u0*/oradata/TX01/*'
+rsh $dest 'rm /u01/app/oracle/product/7.3.4/dbs/ini*'
+#rsh $dest 'rm /u01/app/oracle/admin/TX01/pfile/con*'
+rsh $dest 'rm /arch/TX01/*'
+
+rm /oradump/TX01/safe/*
+rm $ORACLE_HOME/hotbkup/LOG/TX01/*
+rm $ORACLE_HOME/hotbkup/*.lst
+rm $ORACLE_HOME/hotbkup/*.lis
+rm $ORACLE_HOME/hotbkup/*.backup
+
+
+echo "                                                "  &gt;  $DBNAME.backup
+echo "HOTBACKUP PROCESS FOR $DBNAME STARTED  AT `date`"  &gt;&gt; $DBNAME.backup
+echo 
+
+
+#	SET UP THE HEADER FOR THE QUERY
+echo "                                                "  &gt;&gt; $DBNAME.backup
+echo `date`: Set up the header for the query.            &gt;&gt; $DBNAME.backup
+echo set pages 0 &gt; $header
+echo set lines 80 &gt;&gt; $header
+echo set head off &gt;&gt; $header
+echo set echo off &gt;&gt; $header
+echo set verify off &gt;&gt; $header
+echo set feedback off &gt;&gt; $header
+
+
+#	CREATE THE TABLESPACE LISTING QUERY
+echo "                                                "  &gt;&gt; $DBNAME.backup
+echo `date`: Creating the Tablespace listing query       &gt;&gt; $DBNAME.backup
+cat $header &gt; $sqlfile
+echo column fname format a70 &gt;&gt; $sqlfile
+echo SELECT dt.tablespace_name tname &gt;&gt; $sqlfile
+echo FROM sys.dba_tablespaces dt &gt;&gt; $sqlfile
+echo WHERE dt.status not in \(\'OFFLINE\'\)\; &gt;&gt; $sqlfile
+echo exit &gt;&gt; $sqlfile
+
+
+#       CREATE LIST OF TABLESPACES 
+echo "                                                "  &gt;&gt; $DBNAME.backup
+echo `date`: Creating the List of Tablespaces            &gt;&gt; $DBNAME.backup
+$SQLPLUS &lt;$sqlfile &gt; $database.lis
+
+if ($status != 0) then
+    echo ERROR: While creating Tablespace list &gt;&gt; $errlog
+    echo        SQLPLUS failed while running the following  &gt;&gt; $errlog
+    cat $sqlfile &gt;&gt; $errlog
+    exit 1
+endif
+
+
+
+#	CREATE A LIST OF DATAFILES FOR EACH OF THE TABLESPACE  
+echo "`date`: Creating a list of datafiles for each Tablespace of $database" &gt;&gt; $DBNAME.backup
+
+foreach table_space (`cat $database.lis`)
+
+  echo set pages 0 &gt; $sqlfile
+  echo set lines 80 &gt;&gt; $sqlfile
+  echo set head off &gt;&gt; $sqlfile
+  echo set echo off &gt;&gt; $sqlfile
+  echo set verify off &gt;&gt; $sqlfile
+  echo set feedback off &gt;&gt; $sqlfile
+  echo column fname format a70 &gt;&gt; $sqlfile
+  echo SELECT ddf.file_name fname &gt;&gt; $sqlfile
+  echo   FROM sys.dba_data_files ddf &gt;&gt; $sqlfile
+  echo  WHERE ddf.tablespace_name  = upper\(\'$table_space\'\)\; &gt;&gt; $sqlfile
+  echo exit &gt;&gt; $sqlfile
+
+  echo "`date`: Creating datafiles for tablespace $table_space" | tee -a $log
+  $SQLPLUS  &lt;$sqlfile &gt; $table_space.lis
+
+  if ($status != 0) then
+    echo ERROR: While creating datafiles for $table_space &gt;&gt; $errlog
+    echo        SQLPLUS failed while running the following &gt;&gt; $errlog
+    cat $sqlfile &gt;&gt; $errlog
+    exit 1
+  endif
+
+end
+
+
+
+# READ THE FILE, TAKE EACH TABLESPACE OFFLINE, BACKUP THE FILES
+# AND BRING THE TABLESPACE ONLINE
+
+echo "Beginning tablespace backup at `date`" | tee -a $log
+
+foreach tablespace (`cat $database.lis`)
+
+  echo "`date`:Backing up Tablespace $tablespace" | tee -a $log
+  # ENSURE THAT THE TABLESPACE IS NOT ALREADY IN BACKUP MODE
+  echo connect internal\; &gt; $sqlfile
+  echo ALTER tablespace $tablespace begin backup\; &gt;&gt; $sqlfile
+  echo exit &gt;&gt; $sqlfile
+  svrmgrl &lt; $sqlfile &gt; $tablespace.lst
+
+  if ($status != 0) then
+    echo ERROR: SERVER MGR failed while running the following &gt;&gt; $errlog
+    cat $sqlfile &gt;&gt; $errlog
+    exit 1
+  endif
+
+
+  # if the cp does not have enough space to succeed,
+  # sleep 5 minutes and try again
+
+  foreach datafile (`cat $tablespace.lis`)
+
+    if ( -e $datafile ) then
+      set good_cp = 1
+
+      while ($good_cp != 0)
+
+        set thesize = `ls -l $datafile | awk '{print $5}'`
+        set kspace = `df -k $BACKUP_DEST | tail -1 | awk '{print $4}'`
+        set thespace = `expr $kspace \* 1024`
+
+        if ($thesize &lt; $thespace) then
+
+
+# there is not enough disk in /oradump
+# to hold all the .dbf if their cp start at 5 minute intervals
+# so this loop must sleep an extra 35 minutes
+# to allow ts01_02.dbf to finish
+# ts02_01 contributes to 95% full at 04:16
+
+
+          if ( `basename $datafile` == "ts01_03.dbf" ) then
+
+            echo "  sleeping 15 minutes before starting ts01_03.dbf, at `date`" | tee -a $log
+            sleep 900
+            echo "  starting ts01_03.dbf cp to /oradump at `date`" | tee -a $log
+
+          endif
+
+
+          if ( `basename $datafile` == "ts02_01.dbf" ) then
+
+            echo "  sleeping 15 minutes before starting ts02_01.dbf, at `date`" | tee -a $log
+            sleep 900
+            echo "  starting ts02_01.dbf cp to /oradump at `date`" | tee -a $log
+
+          endif
+
+
+          echo "cp $datafile to $BACKUP_DEST beginning at `date`" | tee -a $log
+          cp $datafile $BACKUP_DEST
+
+          if ($status != 0) then
+            echo "cp error -- $datafile `date`" &gt;&gt; $errlog
+            echo "cp error -- $datafile `date`" | tee -a $log
+          else
+            echo "com_ftp of $datafile at `date`" | tee -a $log
+            $HOTBKUP_DIR/com_ftp $BACKUP_DEST/`basename $datafile` `dirname $datafile` $dest &
+
+            sleep 300
+            # this happens 11 times
+
+            set good_cp = 0
+          endif
+
+        else
+          echo "not enough space in $BACKUP_DEST for $datafile, waiting 5 mins" | tee -a $log
+          echo "space is $thespace, $datafile is $thesize bytes" | tee -a $log
+          sleep 300
+        endif
+
+      end
+      # of while ($good_cp != 0)
+
+    else
+      echo "Cannot copy $datafile, does not exist." | tee -a $errlog
+    endif
+
+  end
+  # of foreach datafile (`cat $tablespace.lis`)
+
+
+  echo connect internal\; &gt; $sqlfile
+  echo ALTER tablespace $tablespace end backup\; &gt;&gt; $sqlfile
+  echo exit &gt;&gt; $sqlfile
+  svrmgrl &lt; $sqlfile &gt;&gt; $tablespace.lst
+
+  if ($status != 0) then
+    echo ERROR: Server mgr failed while running the following &gt;&gt;$errlog
+    cat $sqlfile &gt;&gt;$errlog
+    exit 1
+  endif
+
+
+  # CHECK FOR ERROR DURING TABLESPACE BACKUP 
+  grep ORA- $tablespace.lst &gt;&gt;$errlog
+  echo `date`:Completed Backup of Tablespace $tablespace         &gt;&gt; $DBNAME.backup
+  echo "                                                 " 
+
+end
+# end of foreach tablespace (`cat $database.lis`)
+
+
+echo &gt;&gt; $log
+echo ".dbf done, waiting for procs to finish" | tee -a $log
+
+echo "waiting for ftp to finish at `date`" | tee -a $log
+
+set done = 0
+while ($done == 0)
+
+  ps -ef | grep -v grep | grep -v tail | grep com_ftp
+
+  if ($status == 0) then
+    echo "com_ftp still running at `date`" | tee -a $log
+    sleep 300
+  else
+    echo "com_ftp finished running at `date`" | tee -a $log
+    set done = 1
+  endif
+ 
+end     
+
+# sleep added to allow .dbf files to finish      
+
+
+
+#	CREATE CONTROL FILES LISTING QUERY
+echo
+echo "`date`: Creating the Control files listing query" | tee -a $log
+cat $header &gt; $sqlfile
+echo SELECT name  &gt;&gt; $sqlfile
+echo FROM v\$controlfile\;  &gt;&gt; $sqlfile
+echo exit &gt;&gt; $sqlfile
+$SQLPLUS &lt;$sqlfile &gt; control.lis
+
+if ($status != 0) then
+    echo ERROR: While creating control file list  &gt;&gt; $errlog
+    echo SQLPLUS failed while running the following  &gt;&gt; $errlog
+    cat $sqlfile &gt;&gt;$errlog
+endif
+
+
+#     FORMAT CONTROL FILES 
+set control=$HOTBKUP_DIR/control.lis
+cat $control|sed -g 's/,//' | nawk '{printf("%s ",$0)}' | nawk '{printf("%s\n%s\n%s\n%s\n",$1,$2,$3,$4)}' &gt; $control.out
+mv $control.out $control
+
+
+#     COPY CONTROL FILES TO BACKUP DESTINATION DIRECTORY 
+echo
+echo "`date`: Backing up Control files to Backup destination" | tee -a $log
+
+foreach file (`cat $control`)
+
+  if ( -e $file ) then
+    set good_cp = 1
+
+    while ($good_cp != 0)
+
+      set thesize = `ls -l $file | awk '{print $5}'`
+      set kspace = `df -k $BACKUP_DEST | tail -1 | awk '{print $4}'`
+      set thespace = `expr $kspace \* 1024`
+
+      if ($thesize &lt; $thespace) then
+
+        echo "cp $file to $BACKUP_DEST beginning at `date`" | tee -a $log
+        cp $file $BACKUP_DEST
+
+        if ($status != 0) then
+          echo "cp error -- $file `date`" &gt;&gt; $errlog
+          echo "cp error -- $file `date`" | tee -a $log
+        else
+          echo "com_ftp of $file at `date`" | tee -a $log
+          $HOTBKUP_DIR/com_ftp $BACKUP_DEST/`basename $file` `dirname $file` $dest &
+          set good_cp = 0
+        endif
+
+      else
+        echo "not enough space in $BACKUP_DEST for $file, waiting 5 mins" | tee -a $log
+        echo "space is $thespace, $file is $thesize bytes" | tee -a $log
+        sleep 300
+      endif
+
+    end
+    # of while ($good_cp != 0)
+
+  else
+    echo "Cannot copy $file, does not exist." | tee -a $errlog
+  endif
+
+end
+
+
+
+# sleep 3 minutes before doing logfile switch
+
+sleep 180
+
+
+#     FORCE A LOGFILE SWITCH PRIOR TO BACKING UP THE ARCHIVE LOG FILES 
+echo
+echo "`date`: Backing up Archive log files to backup destination" | tee -a $log
+echo connect internal\; &gt; $sqlfile
+echo ALTER system switch logfile\; &gt;&gt; $sqlfile
+echo exit &gt;&gt; $sqlfile
+svrmgrl &lt; $sqlfile &gt; archieve.lst
+
+if ($status != 0) then
+    echo "ERROR: SVRMGR failed while running the following" &gt;&gt; $errlog
+    cat $sqlfile &gt;&gt; $errlog
+endif
+
+
+
+# NOW FTP /ARCH FILES TO DESTINATION BOX
+# SLEEP 2 MINUTES FIRST TO ALLOW ARCHIVE LOG SWITCH
+# TO COMPLETE
+
+echo "`date`: log switch, sleeping 2 mins" | tee -a $log
+sleep 240
+
+# here I need only today's files 
+# instead of --  foreach file ( /arch/TX01/* )
+
+set dt = "`date '+%b %e'`"
+echo "today is $dt -- getting today's /arch/TX01 logs" | tee -a $log
+
+# foreach file (`ls -l /arch/TX01 | grep "$dt" | awk '{print $NF}'`)
+# this causes problems if the refresh starts just before midnight
+
+foreach fullname (`find /arch/TX01 -name "*.arc" -mtime -2`) 
+
+  set file = `basename $fullname`
+
+  if ( -e $file ) then
+    set good_cp = 1
+
+    while ($good_cp != 0)
+
+      set thesize = `ls -l $file | awk '{print $5}'`
+      set kspace = `df -k $BACKUP_DEST | tail -1 | awk '{print $4}'`
+      set thespace = `expr $kspace \* 1024`
+
+      if ($thesize &lt; $thespace) then
+
+        echo "cp $file from /arch/TX01 to $BACKUP_DEST beginning at `date`" | tee -a $log
+        cp /arch/TX01/$file $BACKUP_DEST
+
+        if ($status != 0) then
+          echo "cp error -- $file `date`" &gt;&gt; $errlog
+          echo "cp error -- $file `date`" | tee -a $log
+        else
+          echo "com_ftp of $file at `date`" | tee -a $log
+          $HOTBKUP_DIR/com_ftp $BACKUP_DEST/`basename $file` /arch/TX01 $dest &
+          set good_cp = 0
+        endif
+
+      else
+        echo "not enough space in $BACKUP_DEST for $file, waiting 5 mins" | tee -a $log
+        echo "space is $thespace, $file is $thesize bytes" | tee -a $log
+        sleep 300
+      endif
+
+    end
+    # of while ($good_cp != 0)
+
+  else
+    echo "Cannot copy $file, does not exist." | tee -a $errlog
+  endif
+
+end
+
+
+
+#	CREATE THE LOG FILES LISTING QUERY
+# echo "                                      " 
+# echo `date`: Creating the log files listing query
+# cat $header &gt; $sqlfile
+# echo SELECT member  &gt;&gt; $sqlfile
+# echo FROM v\$logfile\;  &gt;&gt; $sqlfile
+# echo exit &gt;&gt; $sqlfile
+# $SQLPLUS &lt;$sqlfile &gt; log.lis
+#
+# if ($status != 0) then
+#     echo ERROR: While creating log file list  &gt;&gt; $errlog
+#     echo SQLPLUS failed while running the following  &gt;&gt; $errlog
+#     cat $sqlfile &gt;&gt;$errlog
+# endif
+#
+# set log=$HOTBKUP_DIR/log.lis
+# cat $log|sed -g 's/,//' | nawk '{printf("%s ",$0)}' \
+#  | nawk '{printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",$1,$2,$3,$4,$5,$6,$7,$8,$9)}' &gt; $log.out
+# mv $log.out $log
+#
+#
+##     COPY LOG FILES TO BACKUP DESTINATION DIRECTORY 
+# echo "                                                   "
+# echo `date`: Backing up log files to Backup destination
+# foreach file (`cat $log`)
+#        cp $file $BACKUP_DEST
+#
+#        if ($status != 0) then
+#          echo ERROR: while copying $file to backup destination &gt;&gt;$errlog
+#        else
+#          $HOTBKUP_DIR/com_ftp $BACKUP_DEST/`basename $file` `dirname  $file` &
+#        endif
+# end
+##
+
+
+# CREATE BACKUP CONTROL FILES
+
+echo
+echo "`date`: Creating Backup copy of the Control file" | tee -a $log
+echo connect internal\; &gt; $sqlfile
+echo alter database backup controlfile to trace\; &gt;&gt; $sqlfile
+echo exit &gt;&gt; $sqlfile
+svrmgrl &lt; $sqlfile &gt; bak_controlfile.lst
+
+if ($status != 0) then
+  echo BACKUP CONTROL FILE TO TRACE FAILURE &gt;&gt; $errlog
+  echo ERROR: SERVER MANAGER failed while running the following &gt;&gt; $errlog
+  cat $sqlfile &gt;&gt; $errlog
+endif
+
+
+
+# Copy the control file trace to the backup dir
+
+set CNTRLFILENAME = cntrl.$DBNAME
+set DUMPFILENAME = `ls -t $UDUMP | head -1`
+cp $UDUMP/$DUMPFILENAME $BACKUP_DEST/$CNTRLFILENAME
+
+
+
+# copy alert log
+
+set file = $BDUMP/alert_${DBNAME}.log
+set good_cp = 1
+
+while ($good_cp != 0)
+
+  set thesize = `ls -l $file | awk '{print $5}'`
+  set kspace = `df -k $BACKUP_DEST | tail -1 | awk '{print $4}'`
+  set thespace = `expr $kspace \* 1024`
+
+  if ($thesize &lt; $thespace) then
+
+    echo "cp $file to $BACKUP_DEST beginning at `date`" | tee -a $log
+    cp $file $BACKUP_DEST
+
+    if ($status != 0) then
+      echo "cp error -- $file `date`" &gt;&gt; $errlog
+      echo "cp error -- $file `date`" | tee -a $log
+    else
+      set good_cp = 0
+    endif
+
+  else
+    echo "not enough space in $BACKUP_DEST for $file, waiting 5 mins" | tee -a $log
+    echo "space is $thespace, $file is $thesize bytes" | tee -a $log
+    sleep 300
+  endif
+
+end
+# of while ($good_cp != 0)
+
+
+# copy initTX01.ora
+
+set file = $ORACLE_HOME/dbs/init${DBNAME}.ora
+
+if ( -e $file ) then
+  set good_cp = 1
+
+  while ($good_cp != 0)
+
+    set thesize = `ls -l $file | awk '{print $5}'`
+    set kspace = `df -k $BACKUP_DEST | tail -1 | awk '{print $4}'`
+    set thespace = `expr $kspace \* 1024`
+
+    if ($thesize &lt; $thespace) then
+
+      echo "cp $file to $BACKUP_DEST beginning at `date`" | tee -a $log
+      cp $file $BACKUP_DEST
+
+      if ($status != 0) then
+        echo "cp error -- $file `date`" &gt;&gt; $errlog
+        echo "cp error -- $file `date`" | tee -a $log
+      else
+        echo "com_ftp of $file at `date`" | tee -a $log
+        $HOTBKUP_DIR/com_ftp $BACKUP_DEST/init${DBNAME}.ora $ORACLE_HOME/dbs/ $dest &
+        set good_cp = 0
+      endif
+
+    else
+      echo "not enough space in $BACKUP_DEST for $file, waiting 5 mins" | tee -a $log
+      echo "space is $thespace, $file is $thesize bytes" | tee -a $log
+      sleep 300
+    endif
+
+  end
+  # of while ($good_cp != 0)
+
+else
+  echo "Cannot copy $file, does not exist." | tee -a $errlog
+endif
+
+
+# copy configTX01.ora
+#
+# cp $CONFIG/config${DBNAME}.ora $BACKUP_DEST
+# if ($status != 0) then
+#   echo ERROR: while copying config file to backup destination &gt;&gt; $errlog
+#   echo "cp error -- config${DBNAME}.ora at `date`" | tee -a $log
+# else
+#   echo "com_ftp of config${DBNAME}.ora at `date`" | tee -a $log
+#   $HOTBKUP_DIR/com_ftp $BACKUP_DEST/config${DBNAME}.ora $CONFIG &
+# endif
+#
+##  $HOTBKUP_DIR/com_ftp $BACKUP_DEST/config${DBNAME}.ora &
+
+
+
+# SELECT log.high_change#+1
+# for automatic restore on destination
+
+echo "generating change for recovery"
+set change=$HOTBKUP_DIR/change.lis
+cat $header &gt; $sqlfile
+echo select log.high_change\#+1 change &gt;&gt;$sqlfile
+echo from v\$log_history log &gt;&gt;$sqlfile
+echo where rownum \&lt; 2 \; &gt;&gt;$sqlfile
+echo exit &gt;&gt; $sqlfile
+sqlplus -s / &lt; $sqlfile &gt; $change
+
+
+
+
+# now restart the database on the destination server,
+# redo archive logs auto until current date
+#################################################################
+# but first we must wait until all com_ftp processes are finished
+# only then can we restart the database
+
+
+
+echo "waiting for ftp to finish at `date`" | tee -a $log
+
+set done = 0
+while ($done == 0)
+
+  ps -ef | grep -v grep | grep -v tail | grep com_ftp
+
+  if ($status == 0) then
+    echo "com_ftp still running at `date`" | tee -a $log
+    sleep 300
+  else
+    echo "com_ftp not running at `date`" | tee -a $log
+    set done = 1
+  endif
+
+end
+
+
+# com_ftp is done
+# restart the $dest database
+
+echo "running expect-$dest-dbstart at `date`" | tee -a $log
+
+# this needs to change -- 
+# expect-dbstart and expect-dbshut
+# now both parse $1 
+
+set changedate=`cat $change`
+
+$HOTBKUP_DIR/expect-$dest-dbstart $changedate | tee -a $log
+
+
+rsh $dest 'ps -fu oracle' | grep ora_smon_TX01 || \
+  echo "oracle failed to start on $dest" | tee -a $errlog \
+  | tee -a $com_ftp_errlog
+
+
+rsh $dest '/u01/app/oracle/product/7.3.4/billing5.pubsys stop'
+sleep 5
+rsh $dest '/u01/app/oracle/product/7.3.4/billing5.pubsys start'
+
+
+echo "HOTBACKUP PROCESS FOR $DBNAME COMPLETED AT `date`" &gt;&gt; $DBNAME.backup
+echo &gt;&gt; $DBNAME.backup
+echo "error log is below:"
+ls -l $errlog &gt;&gt; $DBNAME.backup
+cat $errlog &gt;&gt; $DBNAME.backup
+echo "---- analyze log ----" &gt;&gt; $DBNAME.backup
+cat $log &gt;&gt; $DBNAME.backup
+echo "this mail is from $0" &gt;&gt; $DBNAME.backup
+
+mailx -s "Hotbackup Report Log, ${DBNAME}_`hostname` -- and oracle3 refresh results" \
+  dba@employer.com &lt; $DBNAME.backup 
+
+echo "$0 is done at `date`" | tee -a $log
+exit 0
+
+
+
+</pre><html>

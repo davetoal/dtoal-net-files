@@ -1,0 +1,176 @@
+<html><head><title>com_ftp</title></head>
+<pre>
+#!/bin/ksh
+# dave toal
+# compress $1 file
+# ftp $1.Z $dest
+# uncompress $dest:/$1
+# $dest ? $3 : oracle3
+
+
+log=$ORACLE_HOME/hotbkup/LOG/TX01/com_ftp.log
+errorlog=$ORACLE_HOME/hotbkup/LOG/TX01/com_ftp_errors.fatalerr
+
+
+# this script will be used to refresh several
+#  different boxes -- format is
+#  com_ftp &lt;filename&gt; &lt;dest dir&gt; &lt;dest hostname&gt;
+
+
+echo "\n\nCOM_FTP -- STARTING $1 at `date`" | tee -a $log
+
+ls -l $1 | tee -a $log
+
+if [ -z "$3" ]
+then
+
+  echo "  received no \$3 arg" | tee -a $log
+  dest=oracle3.employer.com
+  echo "  setting \$dest to $dest" | tee -a $log
+
+else
+
+  echo "  received $3 for destination host" | tee -a $log
+  echo "  setting \$dest to $3" | tee -a $log
+  dest=$3
+
+fi
+
+echo "COM_FTP -- Starting $1, ftp to ${dest}:$2" &gt;&gt; $log
+
+filename=`basename $1`
+sourcedir=`dirname $1`
+
+dname=$2
+destname=$dname/$filename
+
+
+
+# because this is a parallel process now,
+# we need to create a mechanism for tuning
+# the activity, and throttling the bandwidth
+# requirements -- many parallel ftp overload
+# the T1 between here and Medford -- this 
+# limitation is not present in the test
+# environment
+
+numprocs=99
+maxrun=3
+# four simultaneous, max
+
+echo "  with $maxrun for number of max parallel ftp" &gt;&gt; $log
+
+
+while [ $numprocs -gt $maxrun ]
+do
+
+  #  numprocs=`ps -ef | grep -v grep | grep "ftp -n" | wc -l`
+  #  I think it makes sense to avoid all other activity,
+  #  not just ftp -- tune by disk %b if possible
+
+  numftp=`ps -ef | grep -v grep | grep "ftp -n" | wc -l`
+  numgzip=`ps -ef | grep -v grep | grep -v rsh | grep "gzip " | wc -l`
+  numcp=`ps -ef | grep -v grep | grep " cp " | wc -l`
+
+  numprocs=`expr $numftp + $numgzip + $numcp`
+
+
+  if [ $numprocs -gt $maxrun ]
+  then
+    echo "COM_FTP -- WAITING -- $1 is delaying 2 minutes, $numprocs other ftp are running now." | tee -a $log
+    sleep 120
+  else
+    echo "\n\nCOM_FTP -- PROCEEDING -- $1 only sees $numprocs other ftp at `date`" | tee -a $log
+  fi
+done
+
+# get size for comparison after the ftp
+localsize=`ls -l $1 | awk '{print $5}'`
+
+[ -z "$2" ] && echo "\n\n  com_ftp &lt;source filename path&gt; &lt;dest directory&gt; &lt;dest hostname&gt;\n\n" && exit 0
+
+
+echo "        -- $filename -- TRANSFER TO $dest:$dname" | tee -a $log
+
+cd $sourcedir
+
+
+ls -l $1 &gt;&gt; $log
+echo "        -- $filename -- compressing $1..." | tee -a $log
+
+# compress -f $1
+# retry on failure
+
+gzip_result=1
+
+while [ $gzip_result -ne 0 ]
+do
+
+  gzip -1 $1
+
+  if [ $? -eq 0 ]
+  then
+    echo "        -- $filename -- compress done at `date`" | tee -a $log
+    gzip_result=0
+  else
+    echo "COM_FTP -- $filename -- FAILED on COMPRESS -- RETRY" | tee -a $log
+    sleep 180
+  fi 
+
+done
+
+
+ls -l $1.gz &gt;&gt; $log
+# file is now called $filename.gz
+
+echo "        -- $filename -- FTP to $dest starting..." | tee -a $log
+
+echo "user oracle password
+cd $dname
+bin
+put $filename.gz
+bye"  | ftp -n $dest
+
+if [ $? -ne 0 ]
+then
+  echo "FTP  to $dest failed " | tee -a $log | tee -a $errorlog
+fi
+
+echo "        -- $filename -- FTP to $dest done at `date`" | tee -a $log
+
+
+string="rsh $dest 'ls -l $destname.gz'"
+echo $string
+eval $string | tee -a $log 
+
+echo "        -- $filename -- rsh $dest gzip -d $destname..." | tee -a $log
+
+string="rsh $dest '/usr/local/bin/gzip -d $destname'"
+# echo $string 
+eval $string 
+
+if [ $? -ne 0 ]
+then
+  echo "RSH to uncompress on $dest failed " | tee -a $log | tee -a $errorlog
+fi
+
+
+destsize=`rsh $dest ls -l $destname | awk '{print $5}'`
+
+if [ $destsize -ne $localsize ]
+then
+  echo "UNCOMPRESS of $destname on $dest failed -- local size was $localsize and dest file is $destsize" \
+  | tee -a $log | tee -a $errorlog
+fi
+
+
+echo "        -- $filename -- uncompress done at `date`" | tee -a $log
+
+string="rsh $dest 'ls -l $destname'"
+echo $string
+eval $string | tee -a $log
+
+echo "COM_FTP -- $filename -- DONE\n" | tee -a $log
+
+
+</pre><html>

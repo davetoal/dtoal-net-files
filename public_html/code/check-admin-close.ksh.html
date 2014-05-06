@@ -1,0 +1,227 @@
+<html><head><title>check-admin-close.ksh</title></head>
+<pre>
+#!/bin/ksh
+# dave toal, Wed Jan 26 23:20:02 EST 2000, T&T
+#   and again, apr 2 2002
+#
+# if close is running on admin, wait
+#
+# if time lt 20, wait
+#
+
+
+closeflagfile=/export/argus/close/spool/active_test_close.fb
+
+sentflag1=/tmp/admin-close-mail-$$
+sentflag2=/tmp/admin-close-delay-mail-$$
+
+patiencecount=0
+
+minutes=15
+# sleeptime
+
+sleep2=900
+#sleeptime while waiting for 8 pm
+
+
+
+endtime=20
+# 8 pm, the refresh has to delay until this time
+# if close ends before 8 am
+
+
+people="dba@employer.com"
+people2="ops@employer.com, dba@employer.com"
+
+
+r=1
+
+waited=0
+
+while [ $r -eq 1 ]; do
+
+  # num=`rsh admin 'ps -ef | grep -v grep | grep close' | wc -l | awk '{print $1}'`
+  #
+  # instead of this, check for the flag file
+  #
+
+  string="rsh admin 'ls -l $closeflagfile 2&gt;&1'"
+
+  num=`eval $string`
+
+  if echo $num | grep "No such file"
+  then
+
+    echo "The flag file is not on admin, so the close is not running"
+    r=0
+
+    if [ -f $sentflag1 ]
+    then
+      rm $sentflag1
+      echo "sending mail to $people, close is not running"
+
+      mailx -s "oracle3 refresh, close flag is gone from admin" $people &lt;&lt; msg1
+
+
+	The flag file marking a running close is gone.  If the time is
+	after 8 pm, the oracle3 refresh will start.  If not, the refresh
+	will wait until then before starting.
+
+
+        $0 sent this mail.
+
+msg1
+
+    fi
+
+  else
+
+    echo "The close flag file exists on admin, a close is running.   waiting..."
+    sleep `expr 60 \* $minutes`
+    waited=1
+
+    if [ ! -f $sentflag1 ]
+    then
+      touch $sentflag1
+      echo "sending mail to $people, close delayed"
+
+      mailx -s "oracle3 refresh delayed, close flag exists on admin" $people &lt;&lt; msg2
+
+
+	The flag file marking a running close is in place on admin.  This
+	script will delay until the flag file is removed when the close ends,
+	or until 8 pm, before running the oracle3 refresh.
+
+
+	$0 will send this mail every hour 
+	until the close flag is gone.
+
+msg2
+
+    fi
+
+    # patience counter, send mail every n
+    patiencecount=`expr $patiencecount + 1`
+
+    if [ $patiencecount -gt 4 ]
+    then
+      echo "sending mail again"
+      patiencecount=0
+      rm -f $sentflag1
+    fi
+
+  fi
+
+done
+
+time1="`date`"
+
+subject="oracle1 hotbackup delayed, admin close finished at `date`"
+
+echo "Close procs are not running on admin, at `date`."
+
+t=`date +%H`
+
+delayed=0
+
+patiencecount=0
+
+if [ $t -gt 9 ]
+then
+
+  delayed=1
+
+  while [ $t -lt $endtime ]
+  do 
+
+    if [ ! -f $sentflag2 ]
+    then
+      touch $sentflag2
+
+      mailx -s "oracle3 refresh is being delayed until 8 pm" $people2 &lt;&lt; msg3
+
+
+	The business rules for the refresh state that it should not run
+	before 8 pm, if delayed by a running close on admin.  The refresh
+	is currently waiting until 8 pm, close flag file is gone from admin.
+
+
+	This is actually a problem -- the regular refresh will run again at
+	9:30 pm.  If one refresh is already running when another one starts,
+	oracle3 database will be corrupted.  
+
+	Please contact the DBA's and unixgroup.  The best thing to do at this
+	point is probably to delete the rest of this oracle3 refresh chain
+	from the admsrv appworx backlog, and allow the regular refresh to run
+	later on today.
+
+
+
+	This mail is from $0
+
+
+msg3
+
+    fi
+
+    echo "It is $t o'clock -- too early to start oracle3 refresh"
+
+    # send mail every 4 x 900 seconds
+    patiencecount=`expr $patiencecount + 1`
+
+    if [ $patiencecount -gt 4 ]
+    then
+      echo "sending mail again"
+      patiencecount=0
+      rm -f $sentflag2
+    fi
+
+    sleep $sleep2
+
+    t=`date +%H`
+
+  done
+
+  subject="oracle1 hotbackup delayed until `date`"
+
+fi
+
+
+
+echo "It is after business hours.  Hotbackup may run now."
+
+if [ $waited -eq 1 ]
+then
+
+  if [ $delayed -eq 1 ]
+  then
+    text2="The hot backup was then postponed until after 8 PM."
+  fi
+
+  mailx -s "$subject" $people2 &lt;&lt; msg4
+
+
+
+	The close process on admin caused oracle1 hot backup
+	and oracle3 refresh to be delayed.  The close finished 
+	at ${time1}.
+
+
+	$text2
+
+
+	This mail is from $0
+
+msg4
+
+fi
+
+
+rm -f $sentflag1
+rm -f $sentflag2
+
+exit 0
+
+
+
+</pre><html>

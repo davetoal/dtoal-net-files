@@ -1,0 +1,222 @@
+<html><head><title>Torus.pm</title></head>
+<pre>
+
+
+# dave toal
+
+
+package Torus;
+
+
+use strict;
+
+use lib "../lib";
+
+require "matrix.pl";
+require "rotatepoint.pl";
+
+
+
+sub new {
+
+  my $class = shift;
+  my $radius = shift;
+  my $gauge = shift;
+  my $steps = shift;
+  my $file = shift;
+
+  my $self = bless { radius =&gt; $radius, 
+                     gauge  =&gt; $gauge, 
+                     steps  =&gt; $steps, 
+                     file   =&gt; $file } , $class;
+
+  my %p;
+
+  $self-&gt;{pt} = \%p;
+
+  return $self;
+
+}
+
+
+
+sub init {
+
+  my $self = shift;
+
+  print "radius of torus is $self-&gt;{radius}, gauge is $self-&gt;{gauge}, steps is $self-&gt;{steps}, file is $self-&gt;{file}\n";
+
+  my $cx = 0;
+  my $cy = $cx;
+
+  my $pi = 3.14159268;
+  my $conv = (2 * $pi) / 360;
+
+
+  my $step = $self-&gt;{steps};
+  my $rloop = $self-&gt;{radius};
+  my $rcircle = $self-&gt;{gauge};
+
+  for (my $l = 0; $l &lt; 360; $l += $step) {
+
+    print "init starting loop at angle $l\n";
+
+    my @x_array;
+    my @y_array;
+    my @z_array;
+
+    for (my $i = 0; $i &lt; 360; $i += $step) {
+
+      my $angle = $i * $conv;
+
+      my $px = $cx + cos($angle) * $rcircle;
+      my $py = $cy - sin($angle) * $rcircle;
+
+      # move each point -x by radius of loop
+      $px -= $self-&gt;{radius};
+
+      my $pz = 0;
+
+      # then rotate each point around y to position
+      my $xrot = 0;
+      my $yrot = $l;
+      my $zrot = 0;
+
+      my ($tx, $ty, $tz) = rotateglobalpt($px, $py, $pz, $xrot, $yrot, $zrot);
+
+      # print "points at $i are $tx, $ty, $tz\n";
+
+      $x_array[$i] = $tx;
+      $y_array[$i] = $ty;
+      $z_array[$i] = $tz;
+
+    }
+
+    $self-&gt;{pt}-&gt;{"${l}x"} = \@x_array;
+    $self-&gt;{pt}-&gt;{"${l}y"} = \@y_array;
+    $self-&gt;{pt}-&gt;{"${l}z"} = \@z_array;
+
+  }
+
+}
+
+
+
+sub move {
+
+  my $self = shift;
+  my ($dx, $dy, $dz) = @_;
+
+  print "moving by $dx, $dy, $dz\n";
+
+  for (my $l = 0; $l &lt; 360; $l += $self-&gt;{steps}) {
+
+    # print "move starting loop at angle $l\n";
+
+    my $x_array = $self-&gt;{pt}-&gt;{"${l}x"};
+    my $y_array = $self-&gt;{pt}-&gt;{"${l}y"};
+    my $z_array=  $self-&gt;{pt}-&gt;{"${l}z"};
+
+    for (my $i = 0; $i &lt; 360; $i += $self-&gt;{steps}) {
+
+      $x_array-&gt;[$i] += $dx;
+      $y_array-&gt;[$i] += $dy;
+      $z_array-&gt;[$i] += $dz;
+
+    }
+
+  }
+
+}
+
+
+
+sub tilt {
+
+  my $self = shift;
+  my ($rx, $ry, $rz) = @_;
+
+  print "tilting by $rx, $ry, $rz\n";
+
+  for (my $l = 0; $l &lt; 360; $l += $self-&gt;{steps}) {
+
+    # print "tilt starting loop at angle $l\n";
+
+    my $x_array = $self-&gt;{pt}-&gt;{"${l}x"};
+    my $y_array = $self-&gt;{pt}-&gt;{"${l}y"};
+    my $z_array=  $self-&gt;{pt}-&gt;{"${l}z"};
+
+    for (my $i = 0; $i &lt; 360; $i += $self-&gt;{steps}) {
+
+      my ($px, $py, $pz) = ($x_array-&gt;[$i], $y_array-&gt;[$i], $z_array-&gt;[$i]);
+
+      my ($nx, $ny, $nz) = rotateglobalpt($px, $py, $pz, $rx, $ry, $rz);
+
+      # print "$px, $py, $pz tilted to $nx, $ny, $nz\n";
+
+      $x_array-&gt;[$i] = $nx;
+      $y_array-&gt;[$i] = $ny;
+      $z_array-&gt;[$i] = $nz;
+
+    }
+
+  }
+
+}
+
+
+
+sub print {
+
+  my $self = shift;
+
+
+  open(O, "&gt;&gt; $self-&gt;{file}");
+
+
+  for (my $l = 0; $l &lt; 360; $l += $self-&gt;{steps}) { 
+
+    # print "loop number $l\n";
+
+    my $x_array = $self-&gt;{pt}-&gt;{"${l}x"};
+    my $y_array = $self-&gt;{pt}-&gt;{"${l}y"};
+    my $z_array = $self-&gt;{pt}-&gt;{"${l}z"};
+
+    my $prev;
+
+    if ($l &gt; 0) { $prev =  $l - $self-&gt;{steps}; } 
+           else { $prev = 360 - $self-&gt;{steps}; }
+
+    my $px_array = $self-&gt;{pt}-&gt;{"${prev}x"};
+    my $py_array = $self-&gt;{pt}-&gt;{"${prev}y"};
+    my $pz_array = $self-&gt;{pt}-&gt;{"${prev}z"};
+
+    for (my $i = 0; $i &lt; 360; $i += $self-&gt;{steps}) { 
+
+      my $p;
+
+      if ($i &gt; 0) { $p =  $i - $self-&gt;{steps}; } 
+             else { $p = 360 - $self-&gt;{steps}; }
+
+      # print "points are $x_array-&gt;[$i], $y_array-&gt;[$i], $z_array-&gt;[$i]\n"; 
+
+      # triangles from x-&gt;i to px-&gt;i to px-&gt;p, etc
+
+      print O "triangle { &lt;$x_array-&gt;[$i], $y_array-&gt;[$i], $z_array-&gt;[$i]&gt;, &lt;$px_array-&gt;[$i], $py_array-&gt;[$i], $pz_array-&gt;[$i]&gt;, &lt;$px_array-&gt;[$p], $py_array-&gt;[$p], $pz_array-&gt;[$p]&gt; texture { Copper_Metal } }\n";
+
+      print O "triangle { &lt;$x_array-&gt;[$p], $y_array-&gt;[$p], $z_array-&gt;[$p]&gt;, &lt;$x_array-&gt;[$i], $y_array-&gt;[$i], $z_array-&gt;[$i]&gt;, &lt;$px_array-&gt;[$p], $py_array-&gt;[$p], $pz_array-&gt;[$p]&gt; texture { Copper_Metal } }\n";
+
+
+    }
+
+  }
+
+  close(O);
+
+}
+
+ 
+1;
+
+
+</pre><html>

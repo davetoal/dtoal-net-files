@@ -1,0 +1,187 @@
+<html><head><title>rotate.ksh</title></head>
+<pre>
+#!/bin/ksh
+#
+#  rotate.ksh  Dave Toal
+#
+# this takes the output from xnb media mgr as a filename in $1.  
+# this script does awk $3 of that file, and ejects the tape id's it names.  
+# use this to unload old tapes to the inport, when rotating in scratch tapes,  
+# or to manually unload any tapes, selected and printed from media mgr
+#
+
+
+OPENV=/usr/openv
+NBU=$OPENV/netbackup
+VOLMGR=$OPENV/volmgr
+PATH=$PATH:$NBU/bin:$NBU/bin/goodies:$NBU/bin/admincmd:$VOLMGR/bin
+export PATH
+
+people="unix@employer.com"
+
+
+out=/tmp/tapes-out-file
+log=tapes.log
+tapecounter=/tmp/netbackup-tape-count
+ejectcounter=/tmp/ejected-tapes-count
+errfile=/tmp/tape-eject-vmchange-errors
+tapepoolinfo=/tmp/tape-eject-list-of-all-date-range
+alltapeinfo=/tmp/tape-eject-list-of-all-tapes
+slotlist=/tmp/rotate-tapes-list-of-slots
+
+&gt; $out
+date &gt;&gt; $log
+&gt; $alltapeinfo
+&gt; $slotlist
+
+
+if [ -z "$1" ]
+then
+  echo "$0 with the name of a media manager tapes output list as \$1"
+  echo "$0 list-for-rotate-10-30 for example"
+  exit 0
+fi
+
+
+
+# tapes are listed in the file here
+# in netback media manager format
+#
+
+# medialist=`grep TLD $1 | awk '{print $1}' | sort`
+medialist=`cat $1 | awk '{print $1}' | sort`
+
+# test list
+# medialist="000012
+# 100132
+# QUN147
+# 000011"
+
+
+numtapes=`echo "$medialist" | wc -l | awk '{print $1}'`
+
+echo "
+        Ejecting $numtapes tapes at `date '+%T, %D'`.
+" | tee -a $out | tee -a $log
+
+echo "1" &gt; $tapecounter
+tc=`cat $tapecounter`
+
+echo "0" &gt; $ejectcounter
+ejcount=`cat $ejectcounter`
+
+
+for tape in $medialist
+do
+
+  query=`vmquery -m $tape`
+
+  type=`echo "$query" | grep "media type" | awk '{print $3}'`
+  slot=`echo "$query" | grep "robot slot" | awk '{print $3}'`
+  pool=`echo "$query" | grep "volume pool" | awk '{print $3}'`
+  date=`echo "$query" | grep "last mounted" | awk '{print $3, $4, $5, $6, $7}'`
+  robot=`echo "$query" | grep "robot type" | awk '{print $3}'`
+
+  if [ $type = "1/2" ]
+  then
+    # 9840 tape
+    type="HCART"
+  fi
+
+
+  #-------------------------------------------------
+  # The inport on the 9710 has 14 slots.  Load 14,
+  # then ask for a response when they are unloaded.
+  #
+
+  if [ "$robot" == TLD ]
+  then
+    # the tape is in the robot
+
+    ej=`expr \`cat $ejectcounter\` + 1`
+    echo "$ej" &gt; $ejectcounter
+
+    if [ `cat $tapecounter` -gt 14 ]
+    then
+      # the inport is full, so wait until it gets unloaded
+
+      echo "rotate script, waiting for tape unload" | \
+        mailx -s "Please empty the inport, and hit return when done." $people
+
+      echo "\n  Please empty the inport, and hit return when done.\n\n"
+      read reply
+
+      echo "1" &gt; $tapecounter
+
+    fi
+
+    echo "  ejecting $tape, pool $pool $type from slot $slot,
+    last mount was $date, $ej ejected" | tee -a $out
+
+    # save slot number for load.ksh
+    echo $slot &gt;&gt; $slotlist
+
+    echo "    moving $tape to inport slot `cat $tapecounter`...\n"
+
+    # eject the tape
+
+    vmchange -res -m $tape -mt $type -rn 0 -rh netback \
+      -rc1 0 -rc1 0 -e -sec 3 &gt; $errfile 2&gt;&1
+
+    if [ $? -ne 0 ]
+    then
+
+      echo "
+	Error loading tape into the inport.
+	"
+      cat $errfile
+
+      echo
+
+    else
+
+      # set the tape residence to be non-robotic
+
+      vmchange -res -m $tape -mt $type -rn 0 -rh netback \
+        -rc1 0 -rc1 0 
+
+
+    fi | tee -a $out
+
+    #-------------------------------------------------------
+    # first eject it, then set its residence to non-robotic
+    #   if it unloaded to the inport without errors
+    # this prevents it from being re-loaded automatically
+    #
+
+    tc=`expr \`cat $tapecounter\` + 1`
+    echo "$tc" &gt; $tapecounter
+
+  else
+    # the tape is not in the robot
+
+    echo " tape $tape is not in the library" | tee -a $out
+    echo | tee -a $out
+
+  fi | tee -a $log
+
+done
+
+ej=`cat $ejectcounter`
+
+echo "
+
+	$ej tapes were ejected.
+
+" | tee -a $out
+
+echo "this mail is from $0
+" &gt;&gt; $out
+
+
+mailx -s "$ej tapes ejected, `date`" $people &lt; $out
+
+exit 0
+
+
+</pre><html>

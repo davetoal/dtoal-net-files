@@ -1,0 +1,100 @@
+<html><head><title>start-generic-check.ksh</title></head>
+<pre>
+#!/bin/ksh
+#
+# generic daemon startup script,
+#   start the listener-check
+#
+# 4/23/2002 dave toal
+#
+
+
+script=ftp-wpl-check-errors.ksh
+
+
+checkit() {
+
+  if ps -ef | grep -v grep | grep $script
+  then return 0
+  else return 1
+  fi
+
+}
+
+
+startit() {
+
+  nohup ksh ./$script &gt; /dev/null 2&gt;&1 &
+
+  sleep 1
+
+  if checkit
+  then return 0
+  else return 1
+  fi
+
+}
+
+
+killit() {
+
+  p=`ps -ef | grep -v grep | grep $script | awk '{print $2}'`
+  echo "  killing pid $p"
+  kill -9 $p
+
+  if checkit
+  then return 1
+  else return 0
+  fi
+
+}
+
+
+echo
+  
+case "$1" in
+
+  start)
+
+    if checkit
+    then echo "  $script is already running"
+    else echo "  starting $script"
+
+      if startit
+      then echo "  $script started ok"
+      else echo "  $script failed to start"
+      fi
+
+    fi  ;;
+
+
+  stop)
+
+    if checkit
+    then echo "  killing $script"
+
+      if killit
+      then echo "  $script is stopped"
+      else echo "  $script was not killed"
+      fi
+
+    else echo "  $script was not running"
+    fi  ;;
+
+
+  *)
+
+    if checkit
+    then echo "  $script is running"
+    else echo "  $script is not running"
+    fi
+
+esac
+
+echo
+
+exit 0
+
+
+
+</pre><html>
